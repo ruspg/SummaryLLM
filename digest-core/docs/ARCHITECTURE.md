@@ -1,0 +1,1164 @@
+# SummaryLLM Architecture & Technical Specification
+
+> **Version:** 1.2.0 | **Status:** Living Document | **Last Updated:** 2026-03-29
+>
+> Этот документ — единственный источник правды для архитектуры, контрактов и роадмапа.
+> Любые решения, противоречащие этому документу, требуют его обновления.
+
+---
+
+## 1. Product Vision
+
+**Одно предложение:** Ежедневный автоматический дайджест корпоративных коммуникаций
+(почта, чаты), который показывает: что от тебя ждут, что срочно, что решили — с
+трассируемой ссылкой на первоисточник.
+
+**Не-цели (что мы НЕ делаем):**
+- Не платформа для многих пользователей (single-tenant CLI tool)
+- Не real-time система (batch, daily cron)
+- Не замена почтового клиента (дополнение, read-only)
+- Не AI-agent с действиями (только extraction + presentation)
+
+---
+
+## 2. Architecture Principles
+
+| # | Принцип | Следствие |
+|---|---------|-----------|
+| P1 | **Extract-over-Generate** | LLM извлекает факты из evidence, а не генерирует "от себя". Каждый пункт привязан к evidence_id |
+| P2 | **Traceability** | Любой пункт дайджеста → evidence_id → source_ref → оригинальное письмо/сообщение |
+| P3 | **Privacy-first** | PII маскируется на уровне LLM Gateway. Локально — минимальное хранение, ≤7 дней |
+| P4 | **Idempotency** | `(user_id, date)` → один и тот же результат. Watermark + T-48h rebuild window |
+| P5 | **Graceful Degradation** _(target, не реализован — см. TD-004)_ | Сбой любой стадии → частичный результат с пометкой, а не crash. **Сейчас:** exception propagation. **Цель Phase 0:** partial report |
+| P6 | **Simplicity-first** | Не добавлять abstractions до появления второго use case |
+| P7 | **Prompt-is-the-product** | Качество дайджеста на 80% определяется промптом, а не инфраструктурой |
+
+---
+
+## 3. System Context
+
+```
+  IMPLEMENTED                                    PLANNED
+  ==========                                     =======
+
+┌─────────────┐     ┌──────────────────────────────────────────────────┐
+│  Exchange    │────>│                                                  │
+│  (EWS/NTLM) │     │              digest-core (Python 3.11)           │
+└─────────────┘     │                                                  │
+                    │  ingest → normalize → threads → evidence         │
+┌ ─ ─ ─ ─ ─ ─┐     │    → select → LLM extraction → assemble         │
+  Mattermost  ·--->│        → deliver (file + MM DM)                  │
+  ingest           │                                                  │
+  (Phase 3)        │  Outputs:                                        │
+└ ─ ─ ─ ─ ─ ─┘     │    digest-YYYY-MM-DD.json + .md (file)           │
+                    │    Mattermost DM (push, Phase 0)                 │
+┌─────────────┐     │    Prometheus metrics (:9108)                    │
+│  Corp LLM   │<-->│    Structured logs (JSON)                        │
+│  Gateway    │     │    Health/readiness (:9109)                      │
+│             │     └──────────────────────────────────────────────────┘
+│qwen3.5-397b │             │                │
+│ 15 RPM limit│     ┌───────▼──┐      ┌──────▼──────┐
+└─────────────┘     │ File/S3  │      │  Mattermost │
+                    │ (MVP)    │      │  DM (webhook│
+                    └──────────┘      │  or bot API)│
+                                      └─────────────┘
+
+  ───── implemented    ─ ─ ─ planned (ingest only)
+```
+
+---
+
+## 4. Pipeline Stages
+
+### 4.1 Stage Overview
+
+```
+EWS Inbox
+    │
+    ▼
+┌──────────┐   NormalizedMessage[]  (raw HTML body — naming debt, см. TD-009)
+│ 1.INGEST │──────────────────────────┐
+└──────────┘                          │
+    │                                 ▼
+┌──────────┐   NormalizedMessage[]  (cleaned text body)
+│2.NORMALIZE│─────────────────────────┐
+└──────────┘                          │
+    │                                 ▼
+┌──────────┐   ConversationThread[]
+│3.THREADS │──────────────────────────┐
+└──────────┘                          │
+    │                                 ▼
+┌──────────┐   EvidenceChunk[]  (all, ≤3000 tokens total — BUDGET OWNER)
+│4.EVIDENCE│──────────────────────────┐
+└──────────┘                          │
+    │                                 ▼
+┌──────────┐   EvidenceChunk[]  (re-ranked top-20, NO token enforcement)
+│ 5.SELECT │──────────────────────────┐
+└──────────┘                          │
+    │                                 ▼
+┌──────────┐   Digest (validated JSON) — max 1 LLM call (rate limit: 15 RPM)
+│  6.LLM   │──────────────────────────┐
+└──────────┘                          │
+    │                                 ▼
+┌──────────┐   digest-{date}.json + .md
+│7.ASSEMBLE│──────────────────────────┐
+└──────────┘                          │
+    │                                 ▼
+┌──────────┐   file saved + MM DM sent (or webhook)
+│8.DELIVER │
+└──────────┘
+```
+
+### 4.2 Stage Contracts
+
+#### Stage 1: INGEST
+
+**Input:** EWS config + digest_date + time_config
+**Output:** `List[NormalizedMessage]`
+
+> **Naming debt (TD-009):** Тип называется `NormalizedMessage`, но на выходе Stage 1
+> тело письма ещё **не нормализовано** (может содержать HTML). Реальная нормализация —
+> Stage 2. Корректное имя: `RawMessage` для Stage 1, `NormalizedMessage` для Stage 2.
+> Переименование отложено, чтобы не ломать тесты. Учитывать при чтении кода.
+
+```python
+class NormalizedMessage(NamedTuple):  # TODO: rename to RawMessage for Stage 1 output
+    msg_id: str              # InternetMessageId (lowercase, no angle brackets)
+    conversation_id: str     # EWS conversation_id (for threading)
+    datetime_received: datetime  # UTC
+    sender_email: str        # lowercase
+    subject: str
+    text_body: str           # Raw text/HTML body (NOT yet normalized)
+    to_recipients: List[str] # lowercase emails
+    cc_recipients: List[str] # lowercase emails
+```
+
+**Invariants:**
+- NTLM auth, corporate CA support
+- Retry: 8 attempts, exponential backoff (0.5s → 60s)
+- Pagination: configurable page_size (default 100)
+- Watermark: timestamp-based incremental sync in `.state/ews.syncstate`
+- Dedup: by `msg_id` (InternetMessageId)
+
+**Failure mode:** Connection failure after retries → raise, caller handles _(P5 target: partial report)_
+
+---
+
+#### Stage 2: NORMALIZE
+
+**Input:** `List[NormalizedMessage]` (raw)
+**Output:** `List[NormalizedMessage]` (cleaned text_body)
+
+**Operations:**
+1. HTML → text (BeautifulSoup): strip scripts, styles, tracking pixels, cid: images
+2. HTML entity decode
+3. Truncate to 200KB with `[TRUNCATED]` marker
+4. Quote removal (RU/EN patterns, recursive up to 5 levels)
+5. Signature removal (5+ language patterns)
+6. Disclaimer removal
+7. Whitespace normalization
+
+**Invariants:**
+- Output message count == input message count (no filtering here)
+- Empty body after cleaning → body = "" (not filtered out)
+- Subject NOT modified at this stage
+
+---
+
+#### Stage 3: THREADS
+
+**Input:** `List[NormalizedMessage]`
+**Output:** `List[ConversationThread]`
+
+```python
+class ConversationThread(NamedTuple):
+    conversation_id: str
+    messages: List[NormalizedMessage]  # sorted by datetime_received ASC
+    latest_message_time: datetime
+    participant_count: int
+    message_count: int
+```
+
+**Logic:**
+- Group by `conversation_id` (EWS native)
+- Dedup by `msg_id` within thread
+- Max 50 messages per thread (truncate oldest)
+- Sort threads by `latest_message_time` DESC (most recent first)
+
+**Invariant:** `sum(thread.message_count for all threads) == len(unique messages)`
+
+---
+
+#### Stage 4: EVIDENCE SPLIT
+
+**Input:** `List[ConversationThread]`
+**Output:** `List[EvidenceChunk]` (all chunks, sorted by priority_score DESC)
+
+```python
+class EvidenceChunk(NamedTuple):
+    evidence_id: str          # UUID4
+    conversation_id: str
+    content: str              # Text content of chunk
+    source_ref: Dict[str, Any]  # {type, msg_id, conversation_id, message_index, chunk_index}
+    token_count: int          # Estimated tokens (words * 1.3)
+    priority_score: float     # Heuristic priority score
+```
+
+**Token budget constraints:**
+- `max_tokens_per_chunk`: 512
+- `min_tokens_per_chunk`: 64
+- `max_chunks_per_message`: 12
+- `max_total_tokens`: 3000 (entire LLM call budget)
+
+**Splitting strategy:**
+1. Split by paragraphs (`\n\n`)
+2. If paragraph > 512 tokens → split by sentences (`[.!?]+`)
+3. If sentence > 512 tokens → hard truncate
+
+**Priority scoring (additive):**
+- Action words (please, need, urgent, approve, deadline...): +1.0 each
+- Date/time references: +0.5
+- Question marks: +0.5
+- Exclamation marks: +0.3
+- Recency: <1h +2.0, <6h +1.0, <24h +0.5
+
+---
+
+#### Stage 5: CONTEXT SELECTION
+
+**Input:** `List[EvidenceChunk]` (token-budgeted by Stage 4)
+**Output:** `List[EvidenceChunk]` (re-ranked, top-20 by relevance score)
+
+> **Token budget responsibility:**
+> Stage 5 **НЕ** является budget owner. Токенный бюджет (≤3000) контролируется
+> **Stage 4** (`EvidenceSplitter._limit_total_tokens`). Stage 5 только ре-ранжирует
+> и может уменьшить количество чанков, но не увеличить суммарный бюджет.
+>
+> | Стадия | Budget owner? | Что контролирует |
+> |--------|---------------|------------------|
+> | Stage 4 (Evidence) | **YES** | `max_total_tokens=3000`, обрезка чанков |
+> | Stage 5 (Select) | NO | Count-based top-20, re-scoring |
+> | Stage 6 (LLM) | NO | Отправляет as-is |
+
+**Logic:**
+1. Filter out service emails (noreply, undeliverable, OOO, DSN, mailer-daemon)
+2. Re-score chunks (adds to existing `priority_score` from Stage 4):
+   - Positive: actionable words (please, need, approve), direct address (you + must/need/should), deadline patterns
+   - Negative: FYI, newsletters, automated, "no action required"
+3. Select top 20 chunks by combined score
+4. Fallback: min(5, available) if no positive scores
+
+**Known gap:** Stage 5 может вернуть больше чанков, чем пришло от Stage 4
+(невозможно сейчас), но не имеет собственного token enforcement. Если Stage 4
+budget enforcement будет ослаблен — Stage 5 нужно доработать.
+
+---
+
+#### Stage 6: LLM EXTRACTION
+
+**Input:** `List[EvidenceChunk]` + prompt template + trace_id
+**Output:** `Dict` (validated against Digest schema)
+
+**Target model:** `qwen3.5-397b` (corp LLM Gateway)
+
+**Rate limit constraint: 15 RPM (requests per minute)**
+
+Это ключевое ограничение, определяющее архитектуру LLM-вызовов:
+- MVP: **1 LLM-вызов на run** (extraction). При 15 RPM — достаточно с запасом.
+- Quality retry: **+1 вызов** (итого max 2 per run). Всё ещё в пределах лимита.
+- Batch of N users: при 15 RPM max ~15 пользователей/мин или ~900/час.
+  Для single-tenant MVP — не блокер. Для multi-tenant (Phase 4+) — потребуется
+  очередь с rate limiter.
+- **Запрещено:** multi-step pipeline (extract → summarize → format) расходует
+  3 RPM на 1 run и быстро упирается в лимит. ADR-002 (single call) подтверждён.
+
+**LLM Request:**
+```json
+{
+  "model": "qwen3.5-397b",
+  "messages": [
+    {"role": "system", "content": "<prompt_template>"},
+    {"role": "user", "content": "<numbered evidence blocks>"}
+  ],
+  "temperature": 0.1,
+  "max_tokens": 2000
+}
+```
+
+**Retry policy:**
+- JSON parse error: 1 retry after 4s wait _(respect rate limit)_
+  Adds "IMPORTANT: Return strict JSON" hint to system prompt
+- Quality retry: if empty sections but evidence has positive signals
+  (priority_score ≥ 1.5) → 1 retry with quality hint, 4s wait
+- HTTP 429 (rate limit): wait `Retry-After` header or 60s, then 1 retry
+- HTTP 5xx: 1 retry after 5s
+- **Max 2 total LLM calls per pipeline run** (original + 1 retry)
+
+**Response validation:**
+- Each item must have: title, evidence_id, confidence, source_ref
+- `evidence_id` must exist in input evidence list
+- `confidence` must be float in [0, 1]
+- `source_ref` must have `type` field
+- Invalid items silently dropped (partial result)
+
+**Token capture:** from response headers (`x-llm-tokens-in/out`) or body `usage` field
+
+**qwen3.5-397b specific notes:**
+- Prompt language: RU (default) or EN. qwen3.5 handles both well.
+  Keep `extract_actions.v1.j2` (RU) as primary, EN variant for fallback.
+- JSON mode: qwen3.5 reliably outputs structured JSON with clear schema
+  instructions. Few-shot examples still recommended for edge cases.
+- Context window: sufficient for 3000-token evidence + system prompt.
+  No chunking of LLM requests needed.
+
+---
+
+#### Stage 7: ASSEMBLE
+
+**Input:** `Digest` (Pydantic model)
+**Output:** `digest-{date}.json` + `digest-{date}.md`
+
+**JSON Schema:**
+```python
+class Digest(BaseModel):
+    schema_version: str = "1.0"
+    prompt_version: str      # e.g., "extract_actions.v1"
+    digest_date: str         # YYYY-MM-DD
+    trace_id: str            # UUID4
+    sections: List[Section]
+
+class Section(BaseModel):
+    title: str
+    items: List[Item]
+
+class Item(BaseModel):
+    title: str
+    owners_masked: List[str] = []
+    due: Optional[str] = None    # YYYY-MM-DD or null
+    evidence_id: str
+    confidence: float            # 0.0 - 1.0
+    source_ref: Dict[str, Any]   # {type: "email", msg_id: "..."}
+```
+
+**Markdown format:**
+- Russian localization ("Дайджест действий")
+- Max 10 items per section
+- Max 400 words total
+- Confidence → Russian text (очень высокая ≥0.9, высокая ≥0.7, средняя ≥0.5, низкая ≥0.3, очень низкая <0.3)
+- Evidence references section with IDs
+- Empty digest: "За период релевантных действий не найдено"
+
+---
+
+#### Stage 8: DELIVER
+
+**Input:** File paths (`.json`, `.md`) + delivery config
+**Output:** Delivery confirmation (log entry + optional delivery receipt)
+
+**Delivery targets (ordered by priority):**
+
+| Target | Phase | Mechanism | Config |
+|--------|-------|-----------|--------|
+| **File (disk/S3)** | MVP (done) | `Path.write_text()` | `out` CLI flag |
+| **Mattermost DM** | Phase 0 | Incoming webhook POST or Bot API | `deliver.mattermost.*` |
+| Email (SMTP) | Phase 1+ | Optional | `deliver.email.*` |
+
+**Mattermost delivery (Phase 0):**
+
+Два варианта подключения (от простого к гибкому):
+
+**Вариант A: Incoming Webhook (рекомендуется для старта)**
+```python
+# Одна HTTP-команда, нет bot token management
+httpx.post(
+    webhook_url,
+    json={"text": markdown_content}
+)
+```
+- Плюсы: 0 зависимостей, 1 config field, 5 минут setup
+- Минусы: только отправка, нет реакций/команд, привязан к каналу
+
+**Вариант B: Bot API (для Phase 1+ интерактивности)**
+```python
+httpx.post(
+    f"{mm_url}/api/v4/posts",
+    headers={"Authorization": f"Bearer {bot_token}"},
+    json={"channel_id": dm_channel_id, "message": markdown_content}
+)
+```
+- Плюсы: DM любому юзеру, реакции, slash commands
+- Минусы: нужен bot account + token
+
+**Decision (ADR-010):** Начинаем с Incoming Webhook (вариант A).
+Миграция на Bot API — при добавлении `/digest` commands (Phase 1).
+
+**MM Markdown limitations:**
+- Нет `###` heading (только `#` и `##` в некоторых клиентах)
+- Нет collapsible sections
+- Таблицы поддерживаются, но плохо читаются на mobile
+- **Max message size:** 16383 characters. Если дайджест длиннее → split на части.
+- Рекомендация: компактный формат, без Evidence section (ссылки → JSON-файл).
+
+**MM-specific markdown format:**
+```markdown
+## Дайджест действий — 2026-03-29
+
+**Мои действия**
+1. Согласовать бюджет Q2 → @ivan.petrov, срок: 2026-04-01 (уверенность: высокая)
+2. Ответить на запрос юристов по NDA → срок: сегодня (уверенность: средняя)
+
+**Срочное**
+1. Сервер staging упал — нужна диагностика (уверенность: очень высокая)
+
+**К сведению**
+- Перенос stand-up на 11:00 с понедельника
+- Новый шаблон отчётности в Confluence
+
+---
+_trace: abc123 | items: 5 | [полный отчёт](link-to-file)_
+```
+
+**Failure mode:** MM delivery failure → log warning, do NOT fail pipeline.
+File artifacts already written by Stage 7 — delivery is best-effort.
+
+**Feedback collection (Phase 1):**
+- Пользователь ставит emoji-реакцию на сообщение бота (👍/👎/🤔)
+- Bot API может подписаться на `reaction_added` websocket event
+- Логировать: `{trace_id, reaction, timestamp}` → feedback dataset для prompt tuning
+
+---
+
+## 5. Configuration
+
+### 5.1 Config Schema
+
+```yaml
+time:
+  user_timezone: "Europe/Moscow"          # IANA timezone
+  window: "calendar_day"                  # calendar_day | rolling_24h
+
+ews:
+  endpoint: "https://ews.corp.com/EWS/Exchange.asmx"
+  user_upn: "user@corp.com"
+  password_env: "EWS_PASSWORD"            # ENV var name for password
+  verify_ca: "/etc/ssl/corp-ca.pem"       # Corporate CA cert path (optional)
+  autodiscover: false
+  folders: ["Inbox"]
+  lookback_hours: 24
+  page_size: 100
+  sync_state_path: ".state/ews.syncstate"
+
+llm:
+  endpoint: "https://llm-gw.corp.com/api/v1/chat"
+  model: "qwen3.5-397b"                   # Target production model
+  timeout_s: 120                           # 397B model may be slower; was 45
+  headers: {}                              # Extra headers for LLM Gateway
+  max_tokens_per_run: 30000                # Safety limit
+  cost_limit_per_run: 5.0                  # USD safety limit (NOT enforced yet)
+  rate_limit_rpm: 15                       # Gateway rate limit (requests/min)
+
+deliver:
+  mattermost:
+    enabled: true                            # Enable MM delivery
+    webhook_url_env: "MM_WEBHOOK_URL"        # ENV var name for webhook URL
+    # --- Bot API (Phase 1, alternative to webhook) ---
+    # bot_token_env: "MM_BOT_TOKEN"
+    # api_url: "https://mm.corp.com/api/v4"
+    # channel_id: ""                         # DM channel ID (auto-resolve later)
+    max_message_length: 16383                # MM limit
+    include_trace_footer: true               # Add trace_id + item count footer
+
+observability:
+  prometheus_port: 9108
+  log_level: "INFO"
+```
+
+### 5.2 Config Precedence
+
+**TARGET (lowest → highest) — как ДОЛЖНО быть:**
+
+1. Pydantic defaults (hardcoded)
+2. `configs/config.example.yaml`
+3. `configs/config.yaml`
+4. `DIGEST_CONFIG_PATH` env var → custom YAML file
+5. `.env` file and OS environment variables **(highest — always wins)**
+
+**CURRENT (BUG TD-003) — как СЕЙЧАС работает:**
+
+1. Pydantic defaults
+2. `.env` → pydantic-settings `__init__`
+3. `config.example.yaml` → `_apply_yaml_config` **OVERWRITES env**
+4. `config.yaml` → `_apply_yaml_config` **OVERWRITES env**
+5. `DIGEST_CONFIG_PATH` → `_apply_yaml_config` **OVERWRITES env**
+
+**Проблема:** YAML файлы применяются через `_apply_yaml_config()` *после* pydantic-settings
+init, полностью заменяя sub-config объекты (`self.ews = EWSConfig(**yaml['ews'])`).
+Это означает, что любое значение из `.env` или OS env будет затёрто значением из YAML.
+
+**Fix (Phase 0):** Применять YAML *до* pydantic-settings или мержить dict-ы вместо replace.
+
+### 5.3 Secrets (ENV only, never in YAML)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `EWS_PASSWORD` | Yes | EWS/NTLM password |
+| `LLM_TOKEN` | Yes | LLM Gateway Bearer token |
+| `MM_WEBHOOK_URL` | No* | Mattermost incoming webhook URL (*required if deliver.mattermost.enabled) |
+| `MM_BOT_TOKEN` | No | Mattermost bot token (Phase 1, alternative to webhook) |
+| `DIGEST_CONFIG_PATH` | No | Path to custom config YAML |
+| `DIGEST_OUT_DIR` | No | Override output directory |
+| `DIGEST_STATE_DIR` | No | Override state directory |
+| `DIGEST_LOG_LEVEL` | No | Override log level |
+
+---
+
+## 6. Observability
+
+### 6.1 Prometheus Metrics (port 9108)
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `llm_latency_ms` | Histogram | — | LLM request latency |
+| `llm_tokens_in_total` | Counter | — | Input tokens consumed |
+| `llm_tokens_out_total` | Counter | — | Output tokens consumed |
+| `emails_total` | Counter | status | Emails processed by status |
+| `digest_build_seconds` | Summary | — | Total pipeline duration |
+| `runs_total` | Counter | status | Pipeline runs by outcome (ok/failed) |
+| `evidence_chunks_total` | Counter | stage | Evidence chunks by pipeline stage |
+| `threads_total` | Counter | status | Threads by status |
+| `pipeline_stage_duration_seconds` | Histogram | stage | Per-stage latency |
+| `errors_total` | Counter | type, stage | Errors by type and stage |
+| `delivery_total` | Counter | target, status | Delivery attempts (mm/file × ok/failed) |
+
+### 6.2 Structured Logging
+
+- **Library:** structlog (JSON renderer)
+- **Output:** console + file (`~/.digest-logs/run-{timestamp}.log`)
+- **Context:** every log entry includes `trace_id`, `stage`
+- **PII redaction:** passwords, tokens, SSN, credit cards redacted in logs
+- **Email addresses:** NOT redacted in local logs (policy decision)
+
+### 6.3 Health Endpoints (port 9109)
+
+| Endpoint | Success | Failure |
+|----------|---------|---------|
+| `GET /healthz` | 200 `{"status": "healthy"}` | — |
+| `GET /readyz` | 200 `{"status": "ready", "components": {...}}` | 503 `{"status": "not_ready"}` |
+
+Readiness checks: LLM Gateway connectivity (if configured).
+
+---
+
+## 7. Idempotency Model
+
+```
+run_digest("2026-03-29", ...)
+    │
+    ├── digest-2026-03-29.json exists?
+    │       │
+    │       ├── YES + age < 48h → SKIP (return existing)
+    │       ├── YES + age ≥ 48h → REBUILD
+    │       └── NO → BUILD
+    │
+    ▼
+  fetch emails (may use watermark for incremental window)
+    │
+    ▼
+  process pipeline → write artifacts
+    │
+    ▼
+  update watermark (.state/ews.syncstate = end_date ISO)
+```
+
+**Override:** `--force` flag (TODO) to bypass idempotency check.
+
+**Known limitation:** Race condition при параллельных запусках. Два процесса
+(`cron` overlap, manual + cron) могут оба пройти проверку `json_path.exists()` и
+оба записать файл. Для single-user CLI маловероятно. Если станет проблемой —
+добавить file lock (`fcntl.flock` или `filelock` package).
+
+---
+
+## 8. Error Taxonomy
+
+Каждая стадия может упасть. Таблица определяет текущее поведение и целевое (P5).
+
+| Стадия | Error Type | Текущее поведение | Целевое (Phase 0, P5) |
+|--------|-----------|-------------------|-----------------------|
+| **1. Ingest** | EWS auth failure (401/403) | 8 retries → exception → crash | Partial report: "EWS: authentication failed" banner, exit 1 |
+| **1. Ingest** | EWS timeout / network | 8 retries → exception → crash | Same as above |
+| **1. Ingest** | 0 emails fetched | Continues (empty pipeline) | Valid empty digest: "Новых писем нет" |
+| **2. Normalize** | Malformed HTML | BS4 handles gracefully | OK (no change needed) |
+| **3. Threads** | Empty input | Returns `[]` | OK (no change needed) |
+| **4. Evidence** | No chunks created | Returns `[]` | OK, flows to empty digest |
+| **5. Select** | All chunks filtered | Returns top-5 fallback | OK (no change needed) |
+| **6. LLM** | HTTP 429 (rate limit) | No retry → exception → crash | Wait `Retry-After` or 60s, 1 retry, then partial report |
+| **6. LLM** | HTTP 5xx (server error) | No retry → exception → crash | 1 retry after 5s, then partial report |
+| **6. LLM** | HTTP timeout | httpx timeout → exception → crash | Partial report: "LLM Gateway timeout" banner |
+| **6. LLM** | Invalid JSON response | 1 retry → exception if fails again | 1 retry → empty sections (valid partial digest) |
+| **6. LLM** | Empty sections (no actions found) | Quality retry if positive signals | OK (quality retry is implemented) |
+| **7. Assemble** | Disk write failure | Exception → crash | Log error, attempt alternate path or fail with clear message |
+| **7. Assemble** | Word count > 400 | Truncate with "[обрезано]" marker | OK (implemented) |
+| **8. Deliver** | MM webhook unreachable | N/A (not implemented) | `logger.warning()`, exit 0. File artifacts safe (ADR-011) |
+| **8. Deliver** | MM message too long (>16383) | N/A (not implemented) | Split into multiple posts or truncate with link to file |
+| **8. Deliver** | MM webhook returns 4xx | N/A (not implemented) | Log error + webhook URL hint. No retry (config issue) |
+
+**Partial report format (target Phase 0):**
+
+При сбое LLM стадии — генерировать валидный digest с banner-секцией:
+```json
+{
+  "schema_version": "1.0",
+  "prompt_version": "none",
+  "digest_date": "2026-03-29",
+  "trace_id": "...",
+  "sections": [
+    {
+      "title": "Статус",
+      "items": [{
+        "title": "LLM Gateway недоступен. Дайджест неполный.",
+        "evidence_id": "system",
+        "confidence": 0.0,
+        "source_ref": {"type": "system", "error": "HTTP 503"}
+      }]
+    }
+  ]
+}
+```
+
+---
+
+## 9. Prompt Strategy & Section Taxonomy
+
+### 9.1 Current State
+
+| Prompt File | Language | Used In | Status |
+|-------------|----------|---------|--------|
+| `extract_actions.v1.j2` | RU | `run.py` (default) | Active, needs improvement |
+| `extract_actions.en.v1.j2` | EN | `run.py` (qwen models) | Active, needs improvement |
+| `summarize.v1.j2` | RU | NOT USED | Dead code (MD assembled programmatically) |
+| `summarize.en.v1.j2` | EN | NOT USED | Dead code |
+
+### 9.2 Prompt Design Decisions
+
+**Decision: Two-step pipeline is NOT needed for MVP.**
+
+- `extract_actions` → structured JSON (LLM does extraction)
+- Markdown assembled **programmatically** from JSON (deterministic, no LLM)
+
+This is the correct approach:
+- Deterministic formatting (always valid MD)
+- Lower LLM cost (one call, not two)
+- Easier to test (MD assembly is pure function)
+
+**Decision: `summarize.v1.j2` should be removed or moved to `archive/`.**
+
+### 9.3 Section Taxonomy
+
+Промпт должен инструктировать LLM использовать фиксированный набор секций.
+Секции, не входящие в контракт фазы, должны быть проигнорированы assembler-ом.
+
+**MVP (Phase 0-1) — обязательные секции:**
+
+| Section title (RU) | Назначение | Когда создаётся |
+|--------------------|-----------|-----------------|
+| **Мои действия** | Конкретные задачи/просьбы, адресованные получателю | Есть actionable items |
+| **Срочное** | Дедлайны ≤ 2 рабочих дней, urgent-маркеры | Есть urgent items |
+| **К сведению** | Информация без required action, но важная | Есть FYI items |
+
+**Phase 2 — добавляется:**
+
+| Section title (RU) | Назначение |
+|--------------------|-----------|
+| **Упоминания** | Места, где пользователь упомянут по имени/алиасу |
+
+**Phase 3 — добавляется:**
+
+| Section title (RU) | Назначение |
+|--------------------|-----------|
+| **Темы из каналов** | Кластеры сообщений из MM public channels |
+
+**Правила:**
+- Пустые секции не включаются в output
+- Если все секции пустые → "За период релевантных действий не найдено"
+- Assembler должен принимать **любые** section titles от LLM, но сортировать
+  в порядке: Мои действия → Срочное → К сведению → остальные
+
+---
+
+### 9.4 Prompt Quality Gaps (critical)
+
+Current `extract_actions.v1.j2` is 23 lines — too minimal for reliable extraction.
+
+**Missing in prompt:**
+- Few-shot examples (RU + EN)
+- Edge case handling (empty evidence, unclear actions, multiple actions in one chunk)
+- Evidence ID mapping instructions
+- `source_ref` construction rules
+- Handling of threads (multiple messages in one evidence)
+- Confidence calibration guidance
+- Section taxonomy (when to use "Мои действия" vs "Срочное" vs "К сведению")
+
+**Target prompt size:** 80-150 lines with 2-3 few-shot examples.
+
+---
+
+## 10. File & Directory Structure
+
+```
+digest-core/
+├── configs/
+│   ├── config.example.yaml        # Reference config (committed)
+│   └── config.yaml                # User config (gitignored)
+├── docker/
+│   └── Dockerfile                 # Multi-stage, non-root (UID 1001)
+├── docs/
+│   ├── ARCHITECTURE.md            # THIS FILE
+│   ├── Bus_Req_v5.md              # Original business requirements
+│   ├── Tech_details_v1.md         # Original technical spec
+│   └── testing/
+│       ├── MANUAL_TESTING_CHECKLIST.md
+│       └── SEND_RESULTS.md
+├── prompts/
+│   ├── extract_actions.v1.j2      # RU extraction prompt
+│   └── extract_actions.en.v1.j2   # EN extraction prompt
+├── scripts/
+│   ├── run-local.sh               # Local execution helper
+│   ├── test.sh, lint.sh           # Dev scripts
+│   ├── build.sh, deploy.sh        # Build/deploy
+│   ├── smoke.sh                   # Smoke tests
+│   ├── collect_diagnostics.sh     # Log collection
+│   ├── print_env.sh               # Environment diagnostics
+│   └── rotate_state.sh            # State management
+├── src/digest_core/
+│   ├── __init__.py
+│   ├── cli.py                     # Typer CLI entry point
+│   ├── run.py                     # Pipeline orchestration
+│   ├── config.py                  # Pydantic config
+│   ├── ingest/
+│   │   └── ews.py                 # Exchange EWS adapter
+│   ├── normalize/
+│   │   ├── html.py                # HTML → text
+│   │   └── quotes.py              # Quote/signature removal
+│   ├── threads/
+│   │   └── build.py               # Thread grouping
+│   ├── evidence/
+│   │   └── split.py               # Evidence chunking
+│   ├── select/
+│   │   └── context.py             # Context selection/scoring
+│   ├── llm/
+│   │   ├── gateway.py             # LLM HTTP client
+│   │   └── schemas.py             # Pydantic output schemas
+│   ├── assemble/
+│   │   ├── jsonout.py             # JSON output writer
+│   │   └── markdown.py            # Markdown output writer
+│   ├── deliver/                   # Phase 0: delivery targets
+│   │   ├── __init__.py
+│   │   └── mattermost.py         # MM incoming webhook / Bot API
+│   └── observability/
+│       ├── logs.py                # Structured logging
+│       ├── metrics.py             # Prometheus metrics
+│       └── healthz.py             # Health check server
+├── tests/
+│   ├── fixtures/
+│   │   ├── emails/                # Email test fixtures (10 files)
+│   │   ├── emails.json            # Fixture data
+│   │   ├── config_calendar_day.yaml
+│   │   ├── config_rolling_24h.yaml
+│   │   └── generate_fixtures.py   # Fixture generator
+│   ├── mock_llm_gateway.py
+│   ├── test_cli.py
+│   ├── test_empty_day.py
+│   ├── test_evidence_split.py
+│   ├── test_ews_ingest.py
+│   ├── test_idempotency.py
+│   ├── test_llm_contract.py
+│   ├── test_llm_gateway.py
+│   ├── test_llm_integration.py
+│   ├── test_markdown_json_assemble.py
+│   ├── test_masking.py
+│   ├── test_normalize.py
+│   ├── test_observability.py
+│   ├── test_pii_policy.py
+│   ├── test_selector.py
+│   └── test_smoke_cli.py
+├── pyproject.toml                 # Dependencies & build config
+├── Makefile                       # Dev workflow targets
+└── README.md
+```
+
+---
+
+## 11. Dependencies (locked)
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| typer | ≥0.12 | CLI framework |
+| pydantic | ≥2.7 | Data validation |
+| pydantic-settings | ≥2.4 | Configuration management |
+| structlog | ≥24.1 | Structured logging |
+| httpx | ≥0.27 | HTTP client (LLM Gateway) |
+| exchangelib | ≥5.3.6 | EWS client (NTLM) |
+| tenacity | ≥9.0 | Retry logic |
+| prometheus-client | ≥0.20 | Metrics |
+| beautifulsoup4 | ≥4.12 | HTML parsing |
+| pytz | ≥2023.3 | Timezone handling |
+| pyyaml | ≥6.0 | YAML config parsing |
+**Not adding (and why):**
+- `jinja2` — prompts are plain text, not templates (see ADR-009)
+- `tiktoken` — token estimation via `words * 1.3` is sufficient for ≤3000 token budget
+- `faiss` / `sentence-transformers` — rule-based context selection handles ≤100 emails
+- `celery` / `rq` — single-user batch tool, no task queue needed
+- `sqlalchemy` — no database, file-based state is sufficient
+- `fastapi` — no API server needed (CLI + cron)
+
+---
+
+## 12. Architecture Decisions Record (ADR)
+
+### ADR-001: Programmatic MD assembly (not LLM)
+- **Decision:** Markdown generated from JSON by code, not by LLM
+- **Rationale:** Deterministic, testable, cheaper, no hallucination risk
+- **Consequence:** `summarize.v1.j2` is dead code → remove
+
+### ADR-002: Single LLM call per run
+- **Decision:** One extraction call, not multi-step (extract → summarize → format)
+- **Rationale:** Latency, cost, complexity. One 2000-token response is sufficient
+- **Consequence:** Prompt must be high-quality to compensate for single-shot
+
+### ADR-003: Rule-based context selection (not embeddings)
+- **Decision:** Keyword scoring + filtering, no vector embeddings
+- **Rationale:** ≤100 emails/day, rule-based is sufficient and fast
+- **Revisit when:** >500 messages/day or cross-platform dedup (LVL3)
+
+### ADR-004: Timestamp watermark (not EWS SyncFolderItems)
+- **Decision:** Watermark = ISO timestamp of last processed batch
+- **Rationale:** Simpler, portable, works across restarts
+- **Limitation:** May miss messages arriving with past timestamps (rare for email)
+- **Revisit when:** Missed messages become a measurable problem
+
+### ADR-005: No pipeline abstraction (yet)
+- **Decision:** Linear function calls in `run.py`, no stage registry/protocol
+- **Rationale:** One source, one pipeline path. Abstraction cost > benefit
+- **Expires:** Phase 2 start. Phase 2 roadmap включает "Pipeline refactoring:
+  composable stages" (8h). После этого ADR-005 заменяется новым ADR.
+
+### ADR-006: Email addresses NOT masked locally
+- **Decision:** Email addresses remain visible in local artifacts and logs
+- **Rationale:** They are non-sensitive in corporate context; masking adds noise
+- **Masking boundary:** LLM Gateway applies `x-redaction-policy: strict` before inference
+- **Other PII:** phones, SSN, credit cards, names, IPs — masked in logs
+
+### ADR-007: Russian as primary output language
+- **Decision:** Digest output in Russian, prompt switches to EN for qwen models
+- **Rationale:** Corporate environment is RU-first
+- **Consequence:** All section titles, confidence labels, empty-day messages in Russian
+
+### ADR-008: Single LLM call + rate limit budget (qwen3.5-397b, 15 RPM)
+- **Decision:** Max 2 LLM calls per pipeline run (1 primary + 1 retry).
+  No multi-step prompting (extract → summarize → format).
+- **Rationale:** Gateway rate limit 15 RPM. Multi-step (3 calls/run) = max 5 runs/min.
+  Single-call (1-2 calls/run) = max 7-15 runs/min. Подтверждает и усиливает ADR-002.
+- **Consequence:** Prompt quality — единственный рычаг. Нельзя компенсировать
+  плохой extraction вторым LLM-вызовом для "cleanup".
+- **Revisit when:** Rate limit увеличен до ≥60 RPM или добавлен второй endpoint.
+
+### ADR-009: Prompt template files are plain text (not Jinja2)
+- **Decision:** `extract_actions.v1.j2` загружается через `.read_text()`, не через
+  Jinja2 engine. Template variables (`{{ }}`) не используются в extraction prompt.
+- **Rationale:** Extraction prompt — статический текст. Jinja2 adds unnecessary
+  dependency for no benefit. `summarize.v1.j2` использовал Jinja2, но он — dead code.
+- **Consequence:** Переименовать файлы `.j2` → `.txt` или `.prompt` (Phase 0).
+  Если в будущем нужен dynamic prompt — тогда подключить Jinja2.
+
+### ADR-010: Mattermost DM as primary delivery channel (not Web UI)
+- **Decision:** Дайджест доставляется через MM incoming webhook в DM пользователю.
+  Web UI не строим.
+- **Rationale:**
+  - Дайджест — push-продукт ("приходит к тебе"), а не pull ("ты идёшь к нему").
+    Если надо помнить "зайти на страницу" — через неделю перестанешь.
+  - MM DM — push в клиент, который и так открыт весь день (desktop + mobile).
+  - Web UI для одного пользователя = FastAPI + templates + auth + TLS + процесс.
+    MM webhook = один `httpx.post()`.
+  - Feedback loop: реакции (👍/👎) на сообщение бесплатны. В web UI надо строить UI.
+- **Phase 0:** Incoming Webhook (простейший вариант, 4-6h).
+- **Phase 1:** Миграция на Bot API для slash commands (`/digest today`).
+- **Revisit when:** Появится потребность в навигации по истории дайджестов,
+  drill-down в evidence, или поиск по 30+ дайджестам. Тогда — lightweight web UI.
+- **Consequence:** No `fastapi` dependency. Delivery failure = warning, not crash.
+
+### ADR-011: Delivery is best-effort (not transactional)
+- **Decision:** Сбой доставки в MM не блокирует pipeline. File artifacts уже
+  записаны Stage 7 — данные не теряются.
+- **Rationale:** MM webhook может быть недоступен (maintenance, network).
+  Артефакты на диске — source of truth. MM — convenience channel.
+- **Consequence:** Delivery errors → `logger.warning()` + metric `delivery_errors_total`.
+  Pipeline exit code = 0 (success) даже при failed delivery.
+
+---
+
+## 13. Known Technical Debt
+
+| ID | Component | Issue | Severity | Phase to Fix |
+|----|-----------|-------|----------|-------------|
+| TD-001 | `run.py` | `run_digest()` and `run_digest_dry_run()` are 180-line copy-paste | Medium | Phase 0 |
+| TD-002 | `run.py:168` | `Path("prompts")` — relative path, breaks outside `digest-core/` | High | Phase 0 |
+| TD-003 | `config.py` | YAML overwrites ENV (should be: ENV always wins) | High | Phase 0 |
+| TD-004 | `run.py` | No graceful degradation on LLM failure — exception propagates | High | Phase 0 |
+| TD-005 | `extract_actions.v1.j2` | Prompt too minimal (23 lines, no examples, no edge cases) | Critical | Phase 0 |
+| TD-006 | `llm.cost_limit_per_run` | Config field exists but NOT enforced | Low | Phase 1 |
+| TD-007 | `summarize.v1.j2` | Dead code — not called anywhere | Low | Phase 0 |
+| TD-008 | `run.py:376` | `__main__` block missing window/state params | Low | Phase 0 |
+| TD-009 | `ingest/ews.py` | `NormalizedMessage` used for raw (pre-normalize) output — misleading name | Low | Phase 1 |
+| TD-010 | `prompts/*.j2` | Files named `.j2` but not processed by Jinja2 engine (see ADR-009) | Low | Phase 0 |
+| TD-011 | `gateway.py` | No HTTP 429/5xx retry — only JSON parse retry implemented | High | Phase 0 |
+| TD-012 | `config.py` | `rate_limit_rpm` field missing in LLMConfig model | Medium | Phase 0 |
+| TD-013 | `config.py` | `timeout_s` default 45 too low for qwen3.5-397b (large model) → bump to 120 | Medium | Phase 0 |
+
+---
+
+## 14. Roadmap
+
+### Phase 0 — MVP Hardening + MM Delivery (5-7 days)
+
+**Goal:** Daily cron → useful digest → приходит в Mattermost DM.
+
+| Task | Hours | Priority | Description |
+|------|-------|----------|-------------|
+| TD-005 fix | 4h | P0 | Rewrite extract_actions prompt: few-shot examples, section taxonomy (Мои действия / Срочное / К сведению), RU/EN, edge cases. Target: 80-150 lines |
+| TD-002 fix | 1h | P0 | Fix prompt path resolution (`__file__`-relative or `importlib.resources`) |
+| TD-004 fix | 2h | P0 | Graceful LLM degradation → partial report with error banner (see Error Taxonomy) |
+| TD-011 fix | 2h | P0 | Add HTTP 429/5xx retry in `gateway.py` with rate limit awareness (4s min wait) |
+| TD-013 fix | 0.5h | P0 | Bump `timeout_s` default from 45 → 120 for qwen3.5-397b |
+| **MM delivery** | **5h** | **P0** | **Stage 8: Incoming Webhook delivery to MM DM (see ADR-010):** DeliverConfig model (1h), MM markdown formatter (2h), webhook POST with error handling (1h), config + ENV wiring (1h) |
+| TD-001 fix | 2h | P1 | Refactor run.py → single function with `dry_run` flag, eliminate copy-paste |
+| TD-003 fix | 1.5h | P1 | Fix config precedence: ENV > YAML > defaults. Add `rate_limit_rpm` to LLMConfig (TD-012) |
+| TD-010 fix | 0.5h | P2 | Rename `.j2` → `.txt` (see ADR-009). Remove dead `summarize.*` prompts (TD-007) |
+| Add `--force` | 0.5h | P2 | CLI flag to bypass idempotency |
+| E2E smoke test | 3h | P1 | Mock LLM end-to-end test in CI (including delivery mock) |
+
+**Total: ~22h (4-5 days)**
+
+**Exit criteria:**
+- `python -m digest_core.cli run` against real EWS → valid JSON + MD + **MM DM received**
+- Digest содержит секции из taxonomy (Мои действия / Срочное / К сведению)
+- `python -m digest_core.cli run --dry-run` → works from any directory
+- LLM timeout/429 → partial report generated (not crash)
+- MM webhook down → warning logged, file artifacts still saved, exit code 0
+- `make test` passes (all existing + new smoke test)
+
+**Deliverable:** Tag `v0.1.0`
+
+---
+
+### Phase 1 — Dog-fooding & Iteration (1-2 weeks)
+
+**Goal:** Daily use. Iterate prompt quality. Automate deployment.
+
+| Task | Hours | Priority |
+|------|-------|----------|
+| Daily prompt iteration (run → read MM DM → fix prompt → repeat) | ongoing | P0 |
+| Migrate MM delivery to Bot API (prep for slash commands) | 4h | P1 |
+| CI pipeline: GitHub Actions (lint + test + docker build) | 4h | P1 |
+| Cron/systemd unit for daily schedule | 3h | P1 |
+| Docker Compose for production deployment | 2h | P2 |
+| `--force` flag to force rebuild | 0.5h | P2 |
+| Cost budget enforcement (fail if tokens > limit) | 2h | P2 |
+| Feedback: log emoji reactions (👍/👎) via MM websocket | 4h | P2 |
+
+**Exit criteria:**
+- 5 consecutive days of useful digests **received in MM DM**
+- ≥80% action items are correct (subjective self-assessment)
+- CI green on every push
+- Docker image runs unattended via cron
+
+**Deliverable:** Tag `v0.2.0`
+
+---
+
+### Phase 2 — Mention Detection + Slash Commands (2-3 weeks)
+
+**Goal:** Personalized "what's expected of me" section. Interactive commands.
+
+| Task | Hours |
+|------|-------|
+| Alias config: email, login, display name, initials, RU declensions | 6h |
+| Mention detector: regex + LLM classification (imperative/approval/deadline) | 8h |
+| New section in JSON/MD: "Mentions & My Actions" with confidence | 4h |
+| Prompt v2 with mention-aware instructions | 4h |
+| Pipeline refactoring: composable stages (prep for Phase 3) | 8h |
+| Slash commands: `/digest today`, `/digest details <item>` | 6h |
+| Tests for mention detection + slash handler | 4h |
+
+**Exit criteria:**
+- "My Actions" section appears with ≥80% precision (self-assessed)
+- `/digest today` triggers on-demand generation and returns result in DM
+- Pipeline supports injecting new stages without modifying `run.py` core logic
+
+**Deliverable:** Tag `v0.3.0`
+
+---
+
+### Phase 3 — Mattermost Ingest (3-4 weeks)
+
+**Goal:** Unified digest from email + MM public channels.
+
+> Note: MM *delivery* уже работает с Phase 0. Phase 3 — это MM *ingest* (чтение каналов).
+
+| Task | Hours |
+|------|-------|
+| MM ingest adapter (API v4) | 10h |
+| Unified `Message` protocol (email + MM share common interface) | 6h |
+| Cross-source dedup (SHA1 + canonical URL) | 6h |
+| Topic clustering (TF-IDF, NOT embeddings) | 8h |
+| Source attribution in MD: `[email: ...]` / `[mm: #channel]` | 4h |
+| Integration tests with MM mock | 6h |
+
+**Exit criteria:**
+- Digest includes items from both email and MM public channels
+- Each item has correct source attribution
+- No DM content leaks into digest (privacy boundary)
+
+**Deliverable:** Tag `v0.4.0`
+
+---
+
+### Phase 4+ — Future (not planned in detail)
+
+- **LVL4:** DM ingest with consent management
+- **LVL5:** Full interactive MM bot (`/digest since:2025-10-10 only:actions`)
+- **Web UI:** Lightweight history browser (when 30+ digests accumulated)
+- **Multi-user:** Config per user, schedule per user
+- **Quality metrics:** Labeled gold-set, P/R/F1 evaluation
+- **Embedding-based selection:** When message volume exceeds 500/day
+
+---
+
+## 15. Anti-Patterns (What NOT to Do)
+
+| Anti-Pattern | Why It's Bad | Do Instead |
+|-------------|-------------|------------|
+| Add embeddings/FAISS for context selection | Over-engineering for ≤100 emails. Adds GPU dependency | Rule-based scoring works fine |
+| Build multi-user SaaS platform | No demand signal, massive complexity | Single-user CLI tool |
+| Add database (Postgres, SQLite) | File-based state is sufficient. DB adds ops burden | JSON files + watermark |
+| Add message queue (Celery, Redis) | Batch daily job, no async needed | Direct function calls |
+| Create microservices | One process, one pipeline. No service boundaries needed | Monolith |
+| Add real-time processing | Daily cron is the product. Real-time changes everything | Keep batch |
+| Add consent management before DM support | Consent only matters for DM (LVL4). Email is employer-owned | Defer to Phase 4 |
+| Build Web UI before MM delivery works | Push > Pull. Web UI = "remember to visit". MM DM = auto-delivered | MM webhook first, Web UI later for history/search (ADR-010) |
+| Add multiple LLM providers/fallback | One corporate gateway. Provider switching is gateway's job | Single endpoint |
+| Multi-step LLM prompting (extract → summarize → format) | 3 RPM per run at 15 RPM limit = max 5 concurrent users. Single call = 1-2 RPM/run | Keep single LLM call (ADR-002, ADR-008) |
+| Use tiktoken for exact token counting | Approximate `words * 1.3` is sufficient at 3000-token budget scale. Off by ±10% doesn't matter | Keep approximation |
+
+---
+
+## 16. Security Boundaries
+
+```
+┌─────────────────────────────────────────────────────┐
+│                LOCAL TRUST ZONE                      │
+│                                                      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐          │
+│  │ EWS Data │  │ Artifacts│  │   Logs   │          │
+│  │ (raw)    │  │ (JSON/MD)│  │(redacted)│          │
+│  └──────────┘  └──────────┘  └──────────┘          │
+│                                                      │
+│  Email addresses: VISIBLE (policy decision)          │
+│  Phones/SSN/CC: REDACTED in logs                     │
+│  Passwords/Tokens: REDACTED in logs                  │
+│                                                      │
+│  Retention: ≤7 days (configurable)                   │
+│  Access: local filesystem permissions                │
+│                                                      │
+└──────────────────────────┬──────────────────────────┘
+                           │
+                   MASKING BOUNDARY
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────┐
+│              LLM GATEWAY (EXTERNAL)                  │
+│                                                      │
+│  x-redaction-policy: strict                          │
+│  x-log-retention: none                               │
+│  x-trace-id: {trace_id}                             │
+│                                                      │
+│  All PII masked before inference:                    │
+│    [[REDACT:type=EMAIL;id=2a7c]]                    │
+│    [[REDACT:type=PHONE;id=8f3d]]                    │
+│                                                      │
+│  No payload logging on provider side                 │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+## 17. Testing Strategy
+
+### Unit Tests
+- Each stage has dedicated test file
+- Mock external dependencies (EWS, LLM Gateway)
+- Fixture-based: `tests/fixtures/emails/` (10 email samples)
+- Schema validation: Pydantic models enforce contracts
+
+### Integration Tests
+- End-to-end with mock LLM (`tests/mock_llm_gateway.py`)
+- Config loading from fixtures
+- Idempotency tests (T-48h window)
+- Empty day handling
+
+### Smoke Tests
+- `make smoke` — dry-run with example config
+- Docker build + run validation
+
+### Manual Testing
+- Checklist in `docs/testing/MANUAL_TESTING_CHECKLIST.md`
+- 7 stages: env setup, smoke, integration, edge cases, quality, diagnostics, results
+
+### NOT doing (and why)
+- Load testing — single user, ≤100 emails, latency is LLM-bound
+- UI testing — no UI
+- A/B testing — no traffic to split
+- Gold-set evaluation — no labeled data yet (build during Phase 1 dog-fooding)
+
+---
+
+## Appendix A: Glossary
+
+| Term | Definition |
+|------|-----------|
+| **NormalizedMessage** | NamedTuple для email-сообщения. _Naming debt:_ на выходе Stage 1 тело ещё raw (HTML), нормализация — Stage 2 |
+| **ConversationThread** | Группа сообщений с общим `conversation_id`, отсортированных по времени |
+| **Evidence Chunk** | Фрагмент текста email (64-512 tokens) с priority score и source reference |
+| **Watermark** | ISO timestamp последнего обработанного batch, хранится в `.state/ews.syncstate` |
+| **T-48h Window** | Idempotency window: артефакты <48h → skip rebuild |
+| **Context Diet** | Процесс отбора наиболее релевантных evidence chunks в рамках token budget |
+| **Trace ID** | UUID4 на pipeline run, проносится через все логи и артефакты |
+| **source_ref** | JSON-объект, связывающий пункт дайджеста с оригинальным письмом |
+| **evidence_id** | UUID4 конкретного evidence chunk (уникален в пределах run) |
+| **RPM** | Requests Per Minute — rate limit LLM Gateway (15 RPM для qwen3.5-397b) |
+| **Budget Owner** | Стадия pipeline, ответственная за enforcement token budget (Stage 4) |
+
+## Appendix B: Quick Reference — CLI
+
+```bash
+# Full run (today, default model qwen3.5-397b)
+python -m digest_core.cli run
+
+# Specific date
+python -m digest_core.cli run --from-date 2026-03-28
+
+# Dry run (no LLM, stops after context selection)
+python -m digest_core.cli run --dry-run
+
+# Rolling 24h window instead of calendar day
+python -m digest_core.cli run --window rolling_24h
+
+# Custom output and state directories
+python -m digest_core.cli run --out /tmp/digest --state /tmp/state
+
+# Force rebuild (bypass T-48h idempotency) — TODO: not implemented yet
+# python -m digest_core.cli run --force
+
+# Run diagnostics
+python -m digest_core.cli diagnose
+```

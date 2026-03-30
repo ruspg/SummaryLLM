@@ -2,9 +2,14 @@ import typer
 import sys
 import subprocess
 from pathlib import Path
+
+import httpx
+
 from digest_core.diagnostics import export_diagnostics
+from digest_core.deliver.mattermost import ping_mattermost_webhook
 from digest_core.run import run_digest, run_digest_dry_run
 from digest_core.observability.logs import setup_logging
+from digest_core.config import Config
 
 app = typer.Typer(add_completion=False)
 
@@ -154,6 +159,39 @@ def diagnose():
     except Exception as e:
         typer.echo(f"Error running diagnostics: {e}", err=True)
         sys.exit(1)
+
+
+@app.command("mm-ping")
+def mm_ping(
+    message: str | None = typer.Option(
+        None,
+        "--message",
+        "-m",
+        help="Markdown text to send (default: short built-in ping string)",
+    ),
+):
+    """Send one test POST to the Mattermost incoming webhook (MM_WEBHOOK_URL).
+
+    Use from the same host/network as the digest runner to verify connectivity
+    to e.g. mattermost.raiffeisen.ru before a full pipeline run.
+    """
+    try:
+        setup_logging()
+        config = Config().deliver.mattermost
+        status = ping_mattermost_webhook(config, text=message)
+        typer.echo(f"Mattermost webhook OK (HTTP {status}).")
+    except ValueError as e:
+        typer.echo(f"Configuration error: {e}", err=True)
+        raise typer.Exit(1) from e
+    except httpx.HTTPStatusError as e:
+        typer.echo(
+            f"Mattermost webhook HTTP {e.response.status_code}",
+            err=True,
+        )
+        raise typer.Exit(1) from e
+    except httpx.RequestError as e:
+        typer.echo(f"Mattermost webhook request failed: {e}", err=True)
+        raise typer.Exit(1) from e
 
 
 @app.command("export-diagnostics")

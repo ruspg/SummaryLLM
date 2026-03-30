@@ -1,6 +1,7 @@
 """
 Test CLI functionality and exit codes.
 """
+import httpx
 import pytest
 from unittest.mock import patch
 from digest_core.cli import app
@@ -202,3 +203,32 @@ def test_cli_run_logging(runner):
             
             assert result.exit_code == 0
             mock_logging.assert_called_once()
+
+
+def test_cli_mm_ping_help(runner):
+    result = runner.invoke(app, ["mm-ping", "--help"])
+    assert result.exit_code == 0
+    assert "mm-ping" in result.output or "webhook" in result.output.lower()
+
+
+def test_cli_mm_ping_success(runner, monkeypatch):
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url, json):
+            return httpx.Response(200, request=httpx.Request("POST", url))
+
+    monkeypatch.setenv("MM_WEBHOOK_URL", "https://mm.example/hooks/x")
+    monkeypatch.setattr("digest_core.deliver.mattermost.httpx.Client", FakeClient)
+
+    result = runner.invoke(app, ["mm-ping"])
+
+    assert result.exit_code == 0
+    assert "HTTP 200" in result.output

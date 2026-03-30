@@ -151,9 +151,21 @@ class HTMLNormalizer:
         if not normalized_text:
             return True
 
-        return normalized_text == normalized_source and (
+        # Case 1: BS4 passed the original garbage through unchanged
+        if normalized_text == normalized_source and (
             "<" in html_content or ">" in html_content
-        )
+        ):
+            return True
+
+        # Case 2: No real text content outside tags (including unclosed/partial tags)
+        text_outside_tags = re.sub(r"<[^>]*", "", html_content)
+        text_outside_tags = re.sub(r">", "", text_outside_tags).strip()
+        if not re.search(r"[A-Za-z\u0400-\u04FF]{2,}", text_outside_tags) and (
+            "<" in html_content or ">" in html_content
+        ):
+            return True
+
+        return False
 
     def _remove_unwanted_elements(self, soup):
         """Remove script, style, svg, and tracking elements."""

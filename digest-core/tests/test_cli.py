@@ -2,11 +2,17 @@
 Test CLI functionality and exit codes.
 """
 
+import re
 import httpx
 import pytest
 from unittest.mock import patch
 from digest_core.cli import app
 from typer.testing import CliRunner
+
+
+def _strip_ansi(text: str) -> str:
+    """Strip ANSI escape codes from text."""
+    return re.sub(r"\x1b\[[0-9;]*[mGKHF]", "", text)
 
 
 @pytest.fixture
@@ -26,10 +32,11 @@ def test_cli_run_help(runner):
     """Test CLI run command help."""
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
-    assert "from-date" in result.output
-    assert "sources" in result.output
-    assert "out" in result.output
-    assert "model" in result.output
+    output = _strip_ansi(result.output)
+    assert "from-date" in output
+    assert "sources" in output
+    assert "out" in output
+    assert "model" in output
 
 
 def test_cli_run_dry_run(runner):

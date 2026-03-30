@@ -13,6 +13,31 @@ from digest_core.llm.schemas import Digest
 
 logger = structlog.get_logger()
 
+DEFAULT_PING_TEXT = (
+    "ActionPulse: проверка incoming webhook (mm-ping). "
+    "Свой текст: `mm-ping --message \"...\"`."
+)
+
+
+def ping_mattermost_webhook(
+    config: MattermostDeliverConfig,
+    *,
+    text: str | None = None,
+    timeout_s: float = 20.0,
+) -> int:
+    """POST a single test message; returns HTTP status on success.
+
+    Does not log the webhook URL or message body.
+    """
+    webhook_url = config.get_webhook_url()
+    payload_text = text if text is not None else DEFAULT_PING_TEXT
+    logger.info("mattermost_webhook_ping_start")
+    with httpx.Client(timeout=httpx.Timeout(timeout_s)) as client:
+        response = client.post(webhook_url, json={"text": payload_text})
+        response.raise_for_status()
+    logger.info("mattermost_webhook_ping_ok", status_code=response.status_code)
+    return response.status_code
+
 
 class MattermostDeliverer:
     """Send digest messages to Mattermost via incoming webhook."""

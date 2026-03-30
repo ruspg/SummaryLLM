@@ -1,6 +1,6 @@
 # ActionPulse Architecture & Technical Specification
 
-> **Version:** 1.2.0 | **Status:** Living Document | **Last Updated:** 2026-03-29
+> **Version:** 1.2.1 | **Status:** Living Document | **Last Updated:** 2026-03-30
 >
 > Этот документ — единственный источник правды для архитектуры, контрактов и роадмапа.
 > Любые решения, противоречащие этому документу, требуют его обновления.
@@ -29,7 +29,7 @@
 | P2 | **Traceability** | Любой пункт дайджеста → evidence_id → source_ref → оригинальное письмо/сообщение |
 | P3 | **Privacy-first** | PII маскируется на уровне LLM Gateway. Локально — минимальное хранение, ≤7 дней |
 | P4 | **Idempotency** | `(user_id, date)` → один и тот же результат. Watermark + T-48h rebuild window |
-| P5 | **Graceful Degradation** _(target, не реализован — см. TD-004)_ | Сбой любой стадии → частичный результат с пометкой, а не crash. **Сейчас:** exception propagation. **Цель Phase 0:** partial report |
+| P5 | **Graceful Degradation** _(частично)_ | **Сделано (Phase 0):** сбой LLM после ретраев → валидный partial digest с секцией «Статус»; сбой MM delivery → warning, exit 0 (ADR-011). **Ещё нет:** частичный отчёт при падении EWS ingest и др. стадий до LLM — по-прежнему exception |
 | P6 | **Simplicity-first** | Не добавлять abstractions до появления второго use case |
 | P7 | **Prompt-is-the-product** | Качество дайджеста на 80% определяется промптом, а не инфраструктурой |
 
@@ -47,11 +47,11 @@
 └─────────────┘     │                                                  │
                     │  ingest → normalize → threads → evidence         │
 ┌ ─ ─ ─ ─ ─ ─┐     │    → select → LLM extraction → assemble         │
-  Mattermost  ·--->│        → deliver (file + MM DM)                  │
-  ingest           │                                                  │
+  Mattermost  ·--->│        → deliver (file + MM incoming webhook)    │
+  channel ingest   │                                                  │
   (Phase 3)        │  Outputs:                                        │
 └ ─ ─ ─ ─ ─ ─┘     │    digest-YYYY-MM-DD.json + .md (file)           │
-                    │    Mattermost DM (push, Phase 0)                 │
+                    │    Mattermost (webhook, Phase 0)                 │
 ┌─────────────┐     │    Prometheus metrics (:9108)                    │
 │  Corp LLM   │<-->│    Structured logs (JSON)                        │
 │  Gateway    │     │    Health/readiness (:9109)                      │
@@ -475,27 +475,17 @@ observability:
 
 ### 5.2 Config Precedence
 
-**TARGET (lowest → highest) — как ДОЛЖНО быть:**
+**Целевой порядок (от низшего к высшему):**
 
-1. Pydantic defaults (hardcoded)
+1. Значения по умолчанию в Pydantic-моделях
 2. `configs/config.example.yaml`
 3. `configs/config.yaml`
-4. `DIGEST_CONFIG_PATH` env var → custom YAML file
-5. `.env` file and OS environment variables **(highest — always wins)**
+4. YAML по пути из `DIGEST_CONFIG_PATH` (если задан)
+5. Переменные окружения и `.env` через `pydantic-settings` при создании `Config`
 
-**CURRENT (BUG TD-003) — как СЕЙЧАС работает:**
+**Реализация в коде (`config.py`):** сначала выполняется `BaseSettings.__init__` (defaults + `.env` + env), затем по очереди накладываются YAML-файлы через `_apply_yaml_config()` → `_merge_model()`. Для выбранных полей зафиксировано **«если задана переменная окружения — не перезаписывать из YAML»** через `env_field_map`: EWS (`EWS_ENDPOINT`, `EWS_USER_UPN`, `EWS_USER_LOGIN`, `EWS_USER_DOMAIN`) и LLM (`LLM_ENDPOINT`). Пароль EWS и токен LLM читаются только из ENV и в YAML не мержатся.
 
-1. Pydantic defaults
-2. `.env` → pydantic-settings `__init__`
-3. `config.example.yaml` → `_apply_yaml_config` **OVERWRITES env**
-4. `config.yaml` → `_apply_yaml_config` **OVERWRITES env**
-5. `DIGEST_CONFIG_PATH` → `_apply_yaml_config` **OVERWRITES env**
-
-**Проблема:** YAML файлы применяются через `_apply_yaml_config()` *после* pydantic-settings
-init, полностью заменяя sub-config объекты (`self.ews = EWSConfig(**yaml['ews'])`).
-Это означает, что любое значение из `.env` или OS env будет затёрто значением из YAML.
-
-**Fix (Phase 0):** Применять YAML *до* pydantic-settings или мержить dict-ы вместо replace.
+**Ограничение (остаток TD-003):** у полей без записи в `env_field_map` значение из YAML может перезаписать уже выставленное pydantic-settings значение nested-модели. Полное «ENV wins для каждого поля» потребует либо загрузки YAML до `BaseSettings`, либо расширения карты соответствий env ↔ поле (и тестов).
 
 ### 5.3 Secrets (ENV only, never in YAML)
 
@@ -570,7 +560,7 @@ run_digest("2026-03-29", ...)
   update watermark (.state/ews.syncstate = end_date ISO)
 ```
 
-**Override:** `--force` flag (TODO) to bypass idempotency check.
+**Override:** флаг CLI `--force` обходит проверку идемпотентности (пересборка даже при «свежих» артефактах).
 
 **Known limitation:** Race condition при параллельных запусках. Два процесса
 (`cron` overlap, manual + cron) могут оба пройти проверку `json_path.exists()` и
@@ -592,20 +582,20 @@ run_digest("2026-03-29", ...)
 | **3. Threads** | Empty input | Returns `[]` | OK (no change needed) |
 | **4. Evidence** | No chunks created | Returns `[]` | OK, flows to empty digest |
 | **5. Select** | All chunks filtered | Returns top-5 fallback | OK (no change needed) |
-| **6. LLM** | HTTP 429 (rate limit) | No retry → exception → crash | Wait `Retry-After` or 60s, 1 retry, then partial report |
-| **6. LLM** | HTTP 5xx (server error) | No retry → exception → crash | 1 retry after 5s, then partial report |
-| **6. LLM** | HTTP timeout | httpx timeout → exception → crash | Partial report: "LLM Gateway timeout" banner |
-| **6. LLM** | Invalid JSON response | 1 retry → exception if fails again | 1 retry → empty sections (valid partial digest) |
-| **6. LLM** | Empty sections (no actions found) | Quality retry if positive signals | OK (quality retry is implemented) |
+| **6. LLM** | HTTP 429 (rate limit) | `RetryableLLMError` → до 2 попыток с ожиданием (`Retry-After` или дефолт), затем partial digest | OK (см. `gateway.py`, бюджет вызовов в рамках лимита run) |
+| **6. LLM** | HTTP 5xx (server error) | Повтор с backoff (через `RetryableLLMError`), затем partial digest | OK |
+| **6. LLM** | HTTP timeout | После исчерпания ретраев → partial digest с текстом про таймаут | OK (`_build_partial_digest` в `run.py`) |
+| **6. LLM** | Invalid JSON response | Ретраи парсинга/валидации в gateway; при провале — degrade / partial | OK (см. `LLMGateway`, `degrade.py`) |
+| **6. LLM** | Empty sections (no actions found) | Quality retry если есть позитивные сигналы | OK (реализовано) |
 | **7. Assemble** | Disk write failure | Exception → crash | Log error, attempt alternate path or fail with clear message |
 | **7. Assemble** | Word count > 400 | Truncate with "[обрезано]" marker | OK (implemented) |
-| **8. Deliver** | MM webhook unreachable | N/A (not implemented) | `logger.warning()`, exit 0. File artifacts safe (ADR-011) |
-| **8. Deliver** | MM message too long (>16383) | N/A (not implemented) | Split into multiple posts or truncate with link to file |
-| **8. Deliver** | MM webhook returns 4xx | N/A (not implemented) | Log error + webhook URL hint. No retry (config issue) |
+| **8. Deliver** | MM webhook unreachable | `logger.warning()`, exit 0. Файлы уже сохранены | OK (ADR-011, `mattermost.py`) |
+| **8. Deliver** | MM message too long (>16383) | Дробление на несколько сообщений | OK (`MattermostDeliverer`) |
+| **8. Deliver** | MM webhook returns 4xx | Warning / лог; без ретрая (конфиг) | OK |
 
-**Partial report format (target Phase 0):**
+**Partial report format (при сбое LLM):**
 
-При сбое LLM стадии — генерировать валидный digest с banner-секцией:
+Реализовано в `_build_partial_digest()` (`run.py`). Пример формы:
 ```json
 {
   "schema_version": "1.0",
@@ -634,10 +624,10 @@ run_digest("2026-03-29", ...)
 
 | Prompt File | Language | Used In | Status |
 |-------------|----------|---------|--------|
-| `extract_actions.v1.j2` | RU | `run.py` (default) | Active, needs improvement |
-| `extract_actions.en.v1.j2` | EN | `run.py` (qwen models) | Active, needs improvement |
-| `summarize.v1.j2` | RU | NOT USED | Dead code (MD assembled programmatically) |
-| `summarize.en.v1.j2` | EN | NOT USED | Dead code |
+| `extract_actions.v1.txt` | RU | `run.py` / pipeline (plain text, ADR-009) | Active, итерации качества по мере dogfooding |
+| `extract_actions.en.v1.txt` | EN | Тот же путь при выборе EN-шаблона | Active |
+| `thread_summarize/v1/default.j2` | RU/EN | Иерархический режим через `prompt_registry` | Active (Jinja2 только здесь) |
+| `summarize*.j2` | — | Удалены | Был мёртвый код (MD собирается из JSON) |
 
 ### 9.2 Prompt Design Decisions
 
@@ -686,20 +676,11 @@ This is the correct approach:
 
 ---
 
-### 9.4 Prompt Quality Gaps (critical)
+### 9.4 Prompt quality (ongoing)
 
-Current `extract_actions.v1.j2` is 23 lines — too minimal for reliable extraction.
+Промпт `extract_actions.v1.txt` расширен (≈180+ строк): таксономия секций, жёсткий JSON-контракт, few-shot, калибровка confidence, edge cases (пустой evidence, несколько действий в chunk). Дальнейшая полировка — через dogfooding и замеры качества, а не через смену формата без причины.
 
-**Missing in prompt:**
-- Few-shot examples (RU + EN)
-- Edge case handling (empty evidence, unclear actions, multiple actions in one chunk)
-- Evidence ID mapping instructions
-- `source_ref` construction rules
-- Handling of threads (multiple messages in one evidence)
-- Confidence calibration guidance
-- Section taxonomy (when to use "Мои действия" vs "Срочное" vs "К сведению")
-
-**Target prompt size:** 80-150 lines with 2-3 few-shot examples.
+Исторический чеклист из Phase 0 (см. `PHASE0_PROMPT.md`) описывал состояние **до** мержа hardening; не использовать его как proof того, что код всё ещё отсутствует.
 
 ---
 
@@ -911,55 +892,62 @@ digest-core/
 
 ## 13. Known Technical Debt
 
-| ID | Component | Issue | Severity | Phase to Fix |
-|----|-----------|-------|----------|-------------|
-| TD-001 | `run.py` | `run_digest()` and `run_digest_dry_run()` are 180-line copy-paste | Medium | Phase 0 |
-| TD-002 | `run.py:168` | `Path("prompts")` — relative path, breaks outside `digest-core/` | High | Phase 0 |
-| TD-003 | `config.py` | YAML overwrites ENV (should be: ENV always wins) | High | Phase 0 |
-| TD-004 | `run.py` | No graceful degradation on LLM failure — exception propagates | High | Phase 0 |
-| TD-005 | `extract_actions.v1.j2` | Prompt too minimal (23 lines, no examples, no edge cases) | Critical | Phase 0 |
-| TD-006 | `llm.cost_limit_per_run` | Config field exists but NOT enforced | Low | Phase 1 |
-| TD-007 | `summarize.v1.j2` | Dead code — not called anywhere | Low | Phase 0 |
-| TD-008 | `run.py:376` | `__main__` block missing window/state params | Low | Phase 0 |
-| TD-009 | `ingest/ews.py` | `NormalizedMessage` used for raw (pre-normalize) output — misleading name | Low | Phase 1 |
-| TD-010 | `prompts/*.j2` | Files named `.j2` but not processed by Jinja2 engine (see ADR-009) | Low | Phase 0 |
-| TD-011 | `gateway.py` | No HTTP 429/5xx retry — only JSON parse retry implemented | High | Phase 0 |
-| TD-012 | `config.py` | `rate_limit_rpm` field missing in LLMConfig model | Medium | Phase 0 |
-| TD-013 | `config.py` | `timeout_s` default 45 too low for qwen3.5-397b (large model) → bump to 120 | Medium | Phase 0 |
+Сводка ниже отражает **текущий** `main` (~2026-03). Исторические строки Phase 0 в старых версиях этого файла описывали бэклог до мержа hardening — не путать с открытыми задачами.
+
+### 13.1 Снято в коде (Phase 0)
+
+| ID / тема | Примечание |
+|-----------|------------|
+| TD-001 | Общий `_run_pipeline()`, тонкие `run_digest` / `run_digest_dry_run` |
+| TD-002 | `PACKAGE_ROOT / "prompts"` в `run.py` |
+| TD-004 | Partial digest, секция «Статус», `run_meta.partial` |
+| TD-005 | `extract_actions.v1.txt` / `.en` — развёрнутый промпт (см. §9) |
+| TD-007 | Мёртвые `summarize*.j2` удалены |
+| TD-010 | Plain-text промпты `.txt` (ADR-009) |
+| TD-011 | HTTP 429/5xx → `RetryableLLMError`, tenacity, мин. интервал вызовов |
+| TD-012 | `rate_limit_rpm` в `LLMConfig` |
+| TD-013 | `timeout_s` default **120** |
+| Stage 8 | `deliver/mattermost.py`, webhook, best-effort (ADR-011) |
+| Offline | `--dump-ingest`, `--replay-ingest`, `export-diagnostics` |
+| QA | `tests/test_e2e_pipeline.py`, `--force` для идемпотентности |
+
+### 13.2 Открытый долг
+
+| ID | Component | Issue | Severity | Phase |
+|----|-----------|-------|----------|-------|
+| TD-003 | `config.py` | Полный «ENV wins» для всех полей не гарантирован (§5.2) | Medium | Phase 1 |
+| TD-006 | `llm.cost_limit_per_run` | Нет enforcement | Low | Phase 1 |
+| TD-008 | `run.py` | Нет `if __name__ == "__main__"` (вход через `cli`) | Low | Phase 1 |
+| TD-009 | `ingest/ews.py` | `NormalizedMessage` на выходе Stage 1 — вводящее имя | Low | Phase 1 |
+| P5 gap | ingest | Падение EWS до LLM без partial report | Medium | По приоритету |
 
 ---
 
 ## 14. Roadmap
 
-### Phase 0 — MVP Hardening + MM Delivery (5-7 days)
+### Phase 0 — MVP Hardening + MM Delivery
 
-**Goal:** Daily cron → useful digest → приходит в Mattermost DM.
+**Статус:** основная часть работ **выполнена в `main`** (см. §13.1, `PHASE0_PROMPT.md` — только исторический чеклист).
 
-| Task | Hours | Priority | Description |
+**Цель (как было):** daily cron → полезный дайджест → доставка в Mattermost.
+
+Ниже — **исходный план-оценка** (архив); не трактовать как список незакрытых задач.
+
+| Task (архив) | Hours | Priority | Description |
 |------|-------|----------|-------------|
-| TD-005 fix | 4h | P0 | Rewrite extract_actions prompt: few-shot examples, section taxonomy (Мои действия / Срочное / К сведению), RU/EN, edge cases. Target: 80-150 lines |
-| TD-002 fix | 1h | P0 | Fix prompt path resolution (`__file__`-relative or `importlib.resources`) |
-| TD-004 fix | 2h | P0 | Graceful LLM degradation → partial report with error banner (see Error Taxonomy) |
-| TD-011 fix | 2h | P0 | Add HTTP 429/5xx retry in `gateway.py` with rate limit awareness (4s min wait) |
-| TD-013 fix | 0.5h | P0 | Bump `timeout_s` default from 45 → 120 for qwen3.5-397b |
-| **MM delivery** | **5h** | **P0** | **Stage 8: Incoming Webhook delivery to MM DM (see ADR-010):** DeliverConfig model (1h), MM markdown formatter (2h), webhook POST with error handling (1h), config + ENV wiring (1h) |
-| TD-001 fix | 2h | P1 | Refactor run.py → single function with `dry_run` flag, eliminate copy-paste |
-| TD-003 fix | 1.5h | P1 | Fix config precedence: ENV > YAML > defaults. Add `rate_limit_rpm` to LLMConfig (TD-012) |
-| TD-010 fix | 0.5h | P2 | Rename `.j2` → `.txt` (see ADR-009). Remove dead `summarize.*` prompts (TD-007) |
-| Add `--force` | 0.5h | P2 | CLI flag to bypass idempotency |
-| E2E smoke test | 3h | P1 | Mock LLM end-to-end test in CI (including delivery mock) |
+| TD-005 fix | 4h | P0 | Промпт: taxonomy, few-shot, RU/EN |
+| TD-002 fix | 1h | P0 | Путь к `prompts` от корня пакета |
+| TD-004 fix | 2h | P0 | Partial при сбое LLM |
+| TD-011 fix | 2h | P0 | 429/5xx retry + rate spacing |
+| TD-013 fix | 0.5h | P0 | `timeout_s` 120 |
+| MM delivery | 5h | P0 | Stage 8 webhook (ADR-010) |
+| TD-001 fix | 2h | P1 | Единый `_run_pipeline` |
+| TD-003 fix | 1.5h | P1 | Precedence ENV vs YAML |
+| TD-010 fix | 0.5h | P2 | `.txt` + удаление мёртвых промптов |
+| `--force` | 0.5h | P2 | Обход идемпотентности |
+| E2E smoke | 3h | P1 | Mock LLM + MM |
 
-**Total: ~22h (4-5 days)**
-
-**Exit criteria:**
-- `python -m digest_core.cli run` against real EWS → valid JSON + MD + **MM DM received**
-- Digest содержит секции из taxonomy (Мои действия / Срочное / К сведению)
-- `python -m digest_core.cli run --dry-run` → works from any directory
-- LLM timeout/429 → partial report generated (not crash)
-- MM webhook down → warning logged, file artifacts still saved, exit code 0
-- `make test` passes (all existing + new smoke test)
-
-**Deliverable:** Tag `v0.1.0`
+**Критерии выхода (проверка на `main`):** `make test`; `run --dry-run` с корня репозитория; partial при ошибке LLM; MM delivery best-effort; replay/diagnostics CLI. Тег релиза — по отдельному решению.
 
 ---
 
@@ -974,7 +962,6 @@ digest-core/
 | CI pipeline: GitHub Actions (lint + test + docker build) | 4h | P1 |
 | Cron/systemd unit for daily schedule | 3h | P1 |
 | Docker Compose for production deployment | 2h | P2 |
-| `--force` flag to force rebuild | 0.5h | P2 |
 | Cost budget enforcement (fail if tokens > limit) | 2h | P2 |
 | Feedback: log emoji reactions (👍/👎) via MM websocket | 4h | P2 |
 

@@ -4,7 +4,7 @@ Test configuration classes and methods.
 import pytest
 import os
 from unittest.mock import patch, Mock
-from src.digest_core.config import EWSConfig, Config, LLMConfig, TimeConfig, ObservabilityConfig
+from digest_core.config import EWSConfig, Config, LLMConfig, TimeConfig, ObservabilityConfig
 
 
 class TestEWSConfig:

@@ -4,8 +4,8 @@ Test EWS ingestion with mocked exchangelib.
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timezone, timedelta
-from src.digest_core.ingest.ews import EWSIngest
-from src.digest_core.config import Config
+from digest_core.ingest.ews import EWSIngest
+from digest_core.config import Config
 
 
 @pytest.fixture

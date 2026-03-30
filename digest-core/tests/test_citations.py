@@ -29,7 +29,7 @@ def multibyte_normalized_map():
     """Normalized map with multibyte characters (emoji, russian, special chars)."""
     return {
         "msg-emoji": "Hello 👋 world! Important: review PR #123 by tomorrow 🚀",
-        "msg-quotes": "Please review "Document.pdf" and 'report.xlsx' files.",
+        "msg-quotes": 'Please review "Document.pdf" and \'report.xlsx\' files.',
         "msg-mixed": "Срочно: проверить email@example.com до 15:00 ⏰",
     }
 
@@ -545,4 +545,3 @@ class TestCitationEdgeCases:
         
         # Should handle fuzzy matching for whitespace
         assert citation is not None
-

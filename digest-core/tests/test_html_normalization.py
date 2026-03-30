@@ -256,7 +256,7 @@ class TestUnicodeNormalization:
         normalizer = HTMLNormalizer()
         
         # Use various unicode quote characters
-        html = '<p>He said "Hello" and she replied 'Yes'</p>'
+        html = "<p>He said \"Hello\" and she replied 'Yes'</p>"
         text, success = normalizer.html_to_text(html)
         
         assert success is True
@@ -492,4 +492,3 @@ class TestGoals:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

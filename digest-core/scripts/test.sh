@@ -17,7 +17,14 @@ fi
 
 # Run tests with coverage
 echo "Running tests with coverage..."
-pytest tests/ -v --cov=src/digest_core --cov-report=term-missing --cov-report=html
+export PYTHONPATH="$PROJECT_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+
+if pytest --help 2>/dev/null | grep -q -- "--cov"; then
+    pytest tests/ -v --cov=src/digest_core --cov-report=term-missing --cov-report=html
+else
+    echo "pytest-cov not available, running without coverage"
+    pytest tests/ -v
+fi
 
 # Check if tests passed
 if [ $? -eq 0 ]; then

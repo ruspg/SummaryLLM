@@ -129,7 +129,7 @@ class TestSubjectNormalizer:
     
     def test_normalize_complex_case(self, normalizer):
         """Test complex case with multiple transformations."""
-        subject = "RE: Fwd: [EXTERNAL] [JIRA-789] 🚨 Important — "Status Update""
+        subject = 'RE: Fwd: [EXTERNAL] [JIRA-789] 🚨 Important — "Status Update"'
         norm, orig = normalizer.normalize(subject)
         assert norm == 'important - "status update"'
         assert orig == subject
@@ -533,4 +533,3 @@ class TestEdgeCases:
         
         # Should create separate threads
         assert len(threads) == 2
-

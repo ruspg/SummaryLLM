@@ -21,14 +21,22 @@ ews:
 
 llm:
   endpoint: "https://llm-gw.corp.com/api/v1/chat"
-  model: "Qwen/Qwen3-30B-A3B-Instruct-2507"
-  timeout_s: 60
+  model: "qwen3.5-397b"
+  timeout_s: 120
   headers:
     Authorization: "Bearer ${LLM_TOKEN}"
   max_tokens_per_run: 30000
   cost_limit_per_run: 5.0
+  rate_limit_rpm: 15
   strict_json: true          # Enforce strict JSON validation with Pydantic
   max_retries: 3             # Maximum retry attempts for invalid JSON
+
+deliver:
+  mattermost:
+    enabled: true
+    webhook_url_env: "MM_WEBHOOK_URL"
+    max_message_length: 16383
+    include_trace_footer: true
 
 observability:
   prometheus_port: 9108

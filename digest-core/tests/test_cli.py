@@ -39,7 +39,7 @@ def test_cli_run_dry_run(runner):
             "--from-date", "2024-01-15",
             "--sources", "ews",
             "--out", "/tmp/test",
-            "--model", "Qwen/Qwen3-30B-A3B-Instruct-2507",
+            "--model", "qwen3.5-397b-a17b",
             "--dry-run"
         ])
         
@@ -59,7 +59,7 @@ def test_cli_run_success(runner):
             "--from-date", "2024-01-15",
             "--sources", "ews",
             "--out", "/tmp/test",
-            "--model", "Qwen/Qwen3-30B-A3B-Instruct-2507"
+            "--model", "qwen3.5-397b-a17b"
         ])
         
         # Should exit with code 0
@@ -77,7 +77,7 @@ def test_cli_run_with_window(runner):
             "--from-date", "2024-01-15",
             "--sources", "ews",
             "--out", "/tmp/test",
-            "--model", "Qwen/Qwen3-30B-A3B-Instruct-2507",
+            "--model", "qwen3.5-397b-a17b",
             "--window", "rolling_24h"
         ])
         
@@ -95,7 +95,7 @@ def test_cli_run_with_state(runner):
             "--from-date", "2024-01-15",
             "--sources", "ews",
             "--out", "/tmp/test",
-            "--model", "Qwen/Qwen3-30B-A3B-Instruct-2507",
+            "--model", "qwen3.5-397b-a17b",
             "--state", "/tmp/state"
         ])
         
@@ -110,7 +110,7 @@ def test_cli_run_invalid_date(runner):
         "--from-date", "invalid-date",
         "--sources", "ews",
         "--out", "/tmp/test",
-        "--model", "Qwen/Qwen3-30B-A3B-Instruct-2507"
+        "--model", "qwen3.5-397b-a17b"
     ])
     
     # Should exit with error code
@@ -139,7 +139,7 @@ def test_cli_run_multiple_sources(runner):
             "--from-date", "2024-01-15",
             "--sources", "ews,slack",
             "--out", "/tmp/test",
-            "--model", "Qwen/Qwen3-30B-A3B-Instruct-2507"
+            "--model", "qwen3.5-397b-a17b"
         ])
         
         assert result.exit_code == 0
@@ -156,7 +156,7 @@ def test_cli_run_exception_handling(runner):
             "--from-date", "2024-01-15",
             "--sources", "ews",
             "--out", "/tmp/test",
-            "--model", "Qwen/Qwen3-30B-A3B-Instruct-2507"
+            "--model", "qwen3.5-397b-a17b"
         ])
         
         # Should exit with error code
@@ -174,7 +174,7 @@ def test_cli_run_config_loading(runner):
             "--from-date", "2024-01-15",
             "--sources", "ews,slack",
             "--out", "/tmp/test",
-            "--model", "Qwen/Qwen3-30B-A3B-Instruct-2507"
+            "--model", "qwen3.5-397b-a17b"
         ])
 
         assert result.exit_code == 0
@@ -183,7 +183,7 @@ def test_cli_run_config_loading(runner):
             "2024-01-15",
             ["ews", "slack"],
             "/tmp/test",
-            "Qwen/Qwen3-30B-A3B-Instruct-2507",
+            "qwen3.5-397b-a17b",
         )
 
 
@@ -198,7 +198,7 @@ def test_cli_run_logging(runner):
                 "--from-date", "2024-01-15",
                 "--sources", "ews",
                 "--out", "/tmp/test",
-                "--model", "Qwen/Qwen3-30B-A3B-Instruct-2507"
+                "--model", "qwen3.5-397b-a17b"
             ])
             
             assert result.exit_code == 0

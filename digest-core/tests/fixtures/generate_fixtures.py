@@ -353,7 +353,7 @@ def create_config_fixtures():
         },
         "llm": {
             "endpoint": "https://api.openai.com/v1/chat/completions",
-            "model": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+            "model": "qwen3.5-397b-a17b",
             "max_retries": 3,
             "timeout": 30
         }
@@ -372,7 +372,7 @@ def create_config_fixtures():
         },
         "llm": {
             "endpoint": "https://api.openai.com/v1/chat/completions",
-            "model": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+            "model": "qwen3.5-397b-a17b",
             "max_retries": 3,
             "timeout": 30
         }

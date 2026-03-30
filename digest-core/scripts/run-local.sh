@@ -25,7 +25,7 @@ python3 -m digest_core.cli run \
     --out "$OUT_DIR" \
     --state "$STATE_DIR" \
     --window calendar_day \
-    --model "Qwen/Qwen3-30B-A3B-Instruct-2507"
+    --model "qwen3.5-397b-a17b"
 
 echo "Local run completed!"
 echo "Check output files in: $OUT_DIR"

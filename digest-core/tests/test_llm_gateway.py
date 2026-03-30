@@ -34,7 +34,7 @@ def gateway(monkeypatch):
     monkeypatch.setenv("LLM_TOKEN", "test-token")
     config = LLMConfig(
         endpoint="https://api.openai.com/v1/chat/completions",
-        model="qwen3.5-397b",
+        model="qwen3.5-397b-a17b",
         timeout_s=30,
     )
     return LLMGateway(config)
@@ -126,7 +126,7 @@ class TestTokenBudgetEnforcement:
         monkeypatch.setenv("LLM_TOKEN", "test-token")
         config = LLMConfig(
             endpoint="https://api.example.com/v1/chat",
-            model="qwen3.5-397b",
+            model="qwen3.5-397b-a17b",
             timeout_s=30,
             max_tokens_per_run=100,  # very low budget
         )
@@ -158,7 +158,7 @@ class TestTokenBudgetEnforcement:
         monkeypatch.setenv("LLM_TOKEN", "test-token")
         config = LLMConfig(
             endpoint="https://api.example.com/v1/chat",
-            model="qwen3.5-397b",
+            model="qwen3.5-397b-a17b",
             timeout_s=30,
             max_tokens_per_run=500,
         )
@@ -190,7 +190,7 @@ class TestTokenBudgetEnforcement:
         monkeypatch.setenv("LLM_TOKEN", "test-token")
         config = LLMConfig(
             endpoint="https://api.example.com/v1/chat",
-            model="qwen3.5-397b",
+            model="qwen3.5-397b-a17b",
             timeout_s=30,
             max_tokens_per_run=300,
         )
@@ -250,7 +250,7 @@ class TestLLMReplayMode:
         record_file = tmp_path / "llm-recording.json"
         config = LLMConfig(
             endpoint="https://api.example.com/v1/chat",
-            model="qwen3.5-397b",
+            model="qwen3.5-397b-a17b",
             timeout_s=30,
         )
         gw = LLMGateway(config, record_llm=str(record_file))
@@ -262,7 +262,7 @@ class TestLLMReplayMode:
 
         assert record_file.exists()
         recording = json.loads(record_file.read_text())
-        assert recording["meta"]["model"] == "qwen3.5-397b"
+        assert recording["meta"]["model"] == "qwen3.5-397b-a17b"
         assert len(recording["responses"]) == 1
         assert recording["responses"][0]["data"] == {"sections": []}
 
@@ -271,7 +271,7 @@ class TestLLMReplayMode:
         monkeypatch.setenv("LLM_TOKEN", "test-token")
         replay_file = tmp_path / "llm-recording.json"
         recorded = {
-            "meta": {"model": "qwen3.5-397b"},
+            "meta": {"model": "qwen3.5-397b-a17b"},
             "responses": [
                 {
                     "trace_id": "trace-orig",
@@ -291,7 +291,7 @@ class TestLLMReplayMode:
 
         config = LLMConfig(
             endpoint="https://api.example.com/v1/chat",
-            model="qwen3.5-397b",
+            model="qwen3.5-397b-a17b",
             timeout_s=30,
         )
         gw = LLMGateway(config, replay_llm=str(replay_file))
@@ -312,7 +312,7 @@ class TestLLMReplayMode:
 
         config = LLMConfig(
             endpoint="https://api.example.com/v1/chat",
-            model="qwen3.5-397b",
+            model="qwen3.5-397b-a17b",
             timeout_s=30,
         )
         gw = LLMGateway(config, replay_llm=str(replay_file))

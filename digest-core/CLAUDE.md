@@ -38,7 +38,7 @@ make docker-run                       # Run with env vars and volume mounts
 ```
 1.INGEST (ews.py) → 2.NORMALIZE (html.py, quotes.py) → 3.THREADS (build.py)
 → 4.EVIDENCE (split.py, BUDGET OWNER ≤3000 tokens) → 5.SELECT (context.py)
-→ 6.LLM (gateway.py, qwen3.5-397b, max 2 calls/run) → 7.ASSEMBLE (jsonout.py, markdown.py)
+→ 6.LLM (gateway.py, qwen3.5-397b-a17b, max 2 calls/run) → 7.ASSEMBLE (jsonout.py, markdown.py)
 → 8.DELIVER (mattermost.py, webhook/bot)
 ```
 
@@ -91,7 +91,7 @@ make test    # All tests use mocks, run anywhere
 - **NormalizedMessage naming**: Output of Stage 1 (INGEST) is named `NormalizedMessage` but body is still raw HTML. Actual normalization happens in Stage 2. Don't be confused.
 - **Idempotency**: If artifacts exist and are <48h old, pipeline skips. Use `run --force` to bypass the T-48h window.
 - **Token estimation**: `words * 1.3` approximation, NOT tiktoken. Off by ~10% but fine for 3000-token budget.
-- **LLM timeout**: Default `timeout_s` is 120s for qwen3.5-397b (see `LLMConfig`).
+- **LLM timeout**: Default `timeout_s` is 120s for qwen3.5-397b-a17b (see `LLMConfig`).
 - **Extraction prompts**: `extract_actions*.txt` are plain text (ADR-009). Other flows may still reference `.j2` paths via `llm/prompt_registry.py` (e.g. hierarchical summarize).
 
 ## Environment Variables

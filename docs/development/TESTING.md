@@ -95,7 +95,7 @@ class TestConfig:
             },
             "llm": {
                 "endpoint": "https://llm-gw.corp.com/api/v1/chat",
-                "model": "corp/Qwen/Qwen3-30B-A3B-Instruct-2507"
+                "model": "corp/qwen3.5-397b-a17b"
             }
         }
         config = Config(**config_data)
@@ -226,7 +226,7 @@ class TestLLMGatewayIntegration:
         client = LLMGatewayClient(
             endpoint="https://llm-gw.corp.com/api/v1/chat",
             headers={"Authorization": "Bearer token"},
-            model="corp/Qwen/Qwen3-30B-A3B-Instruct-2507"
+            model="corp/qwen3.5-397b-a17b"
         )
         
         messages = [{"role": "user", "content": "Test prompt"}]
@@ -248,7 +248,7 @@ class TestLLMGatewayIntegration:
         client = LLMGatewayClient(
             endpoint="https://llm-gw.corp.com/api/v1/chat",
             headers={"Authorization": "Bearer token"},
-            model="corp/Qwen/Qwen3-30B-A3B-Instruct-2507"
+            model="corp/qwen3.5-397b-a17b"
         )
         
         with pytest.raises(LLMGatewayError, match="Request timeout"):
@@ -270,7 +270,7 @@ class TestLLMGatewayIntegration:
         client = LLMGatewayClient(
             endpoint="https://llm-gw.corp.com/api/v1/chat",
             headers={"Authorization": "Bearer token"},
-            model="corp/Qwen/Qwen3-30B-A3B-Instruct-2507"
+            model="corp/qwen3.5-397b-a17b"
         )
         
         with pytest.raises(LLMGatewayError, match="HTTP 429"):

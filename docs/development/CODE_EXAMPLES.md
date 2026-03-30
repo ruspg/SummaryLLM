@@ -25,7 +25,7 @@ def run(
     from_date: str = typer.Option("today", help="Date to process (YYYY-MM-DD or 'today')"),
     sources: str = typer.Option("ews", help="Comma-separated list of sources"),
     out: Path = typer.Option("./out", help="Output directory"),
-    model: str = typer.Option("corp/Qwen/Qwen3-30B-A3B-Instruct-2507", help="LLM model to use"),
+    model: str = typer.Option("corp/qwen3.5-397b-a17b", help="LLM model to use"),
     dry_run: bool = typer.Option(False, help="Run without LLM calls"),
     verbose: bool = typer.Option(False, help="Verbose output"),
     window: str = typer.Option("calendar_day", help="Time window type")
@@ -373,7 +373,7 @@ def create_sample_digest() -> Digest:
         digest_date="2024-01-15",
         generated_at=datetime.now(),
         trace_id="abc123-def456",
-        model_id="corp/Qwen/Qwen3-30B-A3B-Instruct-2507"
+        model_id="corp/qwen3.5-397b-a17b"
     )
     
     action_item = ActionItem(
@@ -568,7 +568,7 @@ class EWSSettings(BaseSettings):
 
 class LLMSettings(BaseSettings):
     endpoint: str = Field(..., env="LLM_ENDPOINT")
-    model: str = Field("corp/Qwen/Qwen3-30B-A3B-Instruct-2507")
+    model: str = Field("corp/qwen3.5-397b-a17b")
     timeout_s: int = Field(45, ge=10, le=300)
     headers: Dict[str, str] = Field(default_factory=dict)
     max_tokens_per_run: int = Field(30000, ge=1000, le=100000)

@@ -5,7 +5,7 @@ ews:
 llm:
   endpoint: https://api.openai.com/v1/chat/completions
   max_retries: 3
-  model: Qwen/Qwen3-30B-A3B-Instruct-2507
+  model: qwen3.5-397b-a17b
   timeout: 30
 time:
   timezone: UTC

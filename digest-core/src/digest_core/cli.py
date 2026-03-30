@@ -23,7 +23,7 @@ def run(
         "ews", "--sources", help="Comma-separated source types (e.g., 'ews')"
     ),
     out: str = typer.Option("./out", "--out", help="Output directory path"),
-    model: str = typer.Option("qwen3.5-397b", "--model", help="LLM model identifier"),
+    model: str = typer.Option("qwen3.5-397b-a17b", "--model", help="LLM model identifier"),
     window: str = typer.Option(
         "calendar_day", "--window", help="Time window: calendar_day or rolling_24h"
     ),

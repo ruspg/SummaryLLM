@@ -94,7 +94,7 @@ class FakeGateway:
     def get_request_stats(self):
         return {
             "last_latency_ms": 12,
-            "model": "qwen3.5-397b",
+            "model": "qwen3.5-397b-a17b",
             "timeout_s": 120,
         }
 
@@ -301,7 +301,7 @@ def test_pipeline_replay_runs_from_repo_root(monkeypatch, tmp_path):
         from_date="2026-03-29",
         sources=["ews"],
         out=str(out_dir),
-        model="qwen3.5-397b",
+        model="qwen3.5-397b-a17b",
         window="calendar_day",
         state=None,
         force=True,
@@ -335,7 +335,7 @@ def test_pipeline_writes_partial_digest_on_llm_failure(monkeypatch, tmp_path):
         from_date="2026-03-29",
         sources=["ews"],
         out=str(out_dir),
-        model="qwen3.5-397b",
+        model="qwen3.5-397b-a17b",
         window="calendar_day",
         state=None,
         force=True,

@@ -125,7 +125,7 @@ ews:
 
 llm:
   endpoint: "${LLM_ENDPOINT:-https://llm-gw.corp.com/api/v1/chat}"
-  model: "Qwen/Qwen3-30B-A3B-Instruct-2507"
+  model: "qwen3.5-397b-a17b"
   timeout_s: 60
   headers:
     Authorization: "Bearer \${LLM_TOKEN}"

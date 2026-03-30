@@ -56,7 +56,7 @@
 │  Corp LLM   │<-->│    Structured logs (JSON)                        │
 │  Gateway    │     │    Health/readiness (:9109)                      │
 │             │     └──────────────────────────────────────────────────┘
-│qwen3.5-397b │             │                │
+│qwen3.5-397b-a17b │             │                │
 │ 15 RPM limit│     ┌───────▼──┐      ┌──────▼──────┐
 └─────────────┘     │ File/S3  │      │  Mattermost │
                     │ (MVP)    │      │  DM (webhook│
@@ -259,7 +259,7 @@ budget enforcement будет ослаблен — Stage 5 нужно дораб
 **Input:** `List[EvidenceChunk]` + prompt template + trace_id
 **Output:** `Dict` (validated against Digest schema)
 
-**Target model:** `qwen3.5-397b` (corp LLM Gateway)
+**Target model:** `qwen3.5-397b-a17b` (corp LLM Gateway)
 
 **Rate limit constraint: 15 RPM (requests per minute)**
 
@@ -275,7 +275,7 @@ budget enforcement будет ослаблен — Stage 5 нужно дораб
 **LLM Request:**
 ```json
 {
-  "model": "qwen3.5-397b",
+  "model": "qwen3.5-397b-a17b",
   "messages": [
     {"role": "system", "content": "<prompt_template>"},
     {"role": "user", "content": "<numbered evidence blocks>"}
@@ -303,7 +303,7 @@ budget enforcement будет ослаблен — Stage 5 нужно дораб
 
 **Token capture:** from response headers (`x-llm-tokens-in/out`) or body `usage` field
 
-**qwen3.5-397b specific notes:**
+**qwen3.5-397b-a17b specific notes:**
 - Prompt language: RU (default) or EN. qwen3.5 handles both well.
   Keep `extract_actions.v1.j2` (RU) as primary, EN variant for fallback.
 - JSON mode: qwen3.5 reliably outputs structured JSON with clear schema
@@ -450,7 +450,7 @@ ews:
 
 llm:
   endpoint: "https://llm-gw.corp.com/api/v1/chat"
-  model: "qwen3.5-397b"                   # Target production model
+  model: "qwen3.5-397b-a17b"                   # Target production model
   timeout_s: 120                           # 397B model may be slower; was 45
   headers: {}                              # Extra headers for LLM Gateway
   max_tokens_per_run: 30000                # Safety limit
@@ -841,7 +841,7 @@ digest-core/
 - **Rationale:** Corporate environment is RU-first
 - **Consequence:** All section titles, confidence labels, empty-day messages in Russian
 
-### ADR-008: Single LLM call + rate limit budget (qwen3.5-397b, 15 RPM)
+### ADR-008: Single LLM call + rate limit budget (qwen3.5-397b-a17b, 15 RPM)
 - **Decision:** Max 2 LLM calls per pipeline run (1 primary + 1 retry).
   No multi-step prompting (extract → summarize → format).
 - **Rationale:** Gateway rate limit 15 RPM. Multi-step (3 calls/run) = max 5 runs/min.
@@ -1268,7 +1268,7 @@ python -m digest_core.cli run --replay-llm /tmp/llm-recording.json
 
 ### Integration Tests — Real (corp network ONLY)
 - Real EWS fetch against Exchange server
-- Real LLM extraction against qwen3.5-397b
+- Real LLM extraction against qwen3.5-397b-a17b
 - Real MM delivery to test channel
 - **Run:** manual from corp workstation
 - **Output:** diagnostic bundle → MM DM for analysis
@@ -1309,7 +1309,7 @@ python -m digest_core.cli run --replay-llm /tmp/llm-recording.json
 | **Trace ID** | UUID4 на pipeline run, проносится через все логи и артефакты |
 | **source_ref** | JSON-объект, связывающий пункт дайджеста с оригинальным письмом |
 | **evidence_id** | UUID4 конкретного evidence chunk (уникален в пределах run) |
-| **RPM** | Requests Per Minute — rate limit LLM Gateway (15 RPM для qwen3.5-397b) |
+| **RPM** | Requests Per Minute — rate limit LLM Gateway (15 RPM для qwen3.5-397b-a17b) |
 | **Budget Owner** | Стадия pipeline, ответственная за enforcement token budget (Stage 4) |
 | **Diagnostic Bundle** | tar.gz архив с redacted логами, метриками и артефактами для дебага вне corp сети |
 | **Replay Mode** | Прогон pipeline из сохранённых EWS/LLM snapshot-ов без реального сетевого доступа |
@@ -1318,7 +1318,7 @@ python -m digest_core.cli run --replay-llm /tmp/llm-recording.json
 ## Appendix B: Quick Reference — CLI
 
 ```bash
-# Full run (today, default model qwen3.5-397b)
+# Full run (today, default model qwen3.5-397b-a17b)
 python -m digest_core.cli run
 
 # Specific date

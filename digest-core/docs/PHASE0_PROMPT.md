@@ -4,7 +4,7 @@
 
 ---
 
-You are working on **ActionPulse** — a daily corporate email digest tool that extracts actionable items from Exchange emails using an LLM (qwen3.5-397b) and delivers the digest to Mattermost DM.
+You are working on **ActionPulse** — a daily corporate email digest tool that extracts actionable items from Exchange emails using an LLM (qwen3.5-397b-a17b) and delivers the digest to Mattermost DM.
 
 ## Before you start
 
@@ -27,7 +27,7 @@ Execute the tasks below **in the recommended order**. Each task is a separate co
 1. **[TD-013] Bump timeout_s 45→120** (0.5h)
    - File: `src/digest_core/config.py` — change `timeout_s` default from 45 to 120 in `LLMConfig`
    - File: `configs/config.example.yaml` — update `timeout_s: 120`
-   - Why first: trivial change, unblocks real LLM testing with qwen3.5-397b
+   - Why first: trivial change, unblocks real LLM testing with qwen3.5-397b-a17b
 
 2. **[TD-002] Fix prompt path resolution** (1h)
    - File: `src/digest_core/run.py` line ~168 — `Path("prompts")` is relative, breaks outside `digest-core/`
@@ -128,7 +128,7 @@ Execute the tasks below **in the recommended order**. Each task is a separate co
 
 ## Key constraints to remember
 
-- **LLM model:** qwen3.5-397b, 15 RPM rate limit. Max 2 LLM calls per run. Temperature 0.1.
+- **LLM model:** qwen3.5-397b-a17b, 15 RPM rate limit. Max 2 LLM calls per run. Temperature 0.1.
 - **Network:** EWS and LLM Gateway only accessible from corp network. MM accessible from everywhere. All CI tests use mocks.
 - **Output language:** Russian for digest content, section titles, error messages.
 - **Code style:** Python 3.11, ruff (line-length=100), black, structlog for logging, httpx for HTTP, pydantic for validation.

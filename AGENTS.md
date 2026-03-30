@@ -5,7 +5,7 @@ Daily corporate communications digest with LLM extraction. Privacy-first, eviden
 ## Repo Structure
 
 ```
-digest-core/     # Python package — the actual product (see digest-core/CLAUDE.md)
+digest-core/     # Python package — the actual product (see digest-core/AGENTS.md)
 scripts/         # Installation and setup scripts (install.sh, setup.sh)
 ```
 
@@ -17,6 +17,8 @@ Monorepo with one package. All development happens in `digest-core/`.
 - `digest-core/docs/PHASE0_PROMPT.md` — Historical Phase 0 execution checklist; not a guarantee that items are still open
 - `docs/planning/BUSINESS_REQUIREMENTS.md` — Product / business requirements (repo root `docs/`)
 - `docs/development/TECHNICAL.md` — Broader technical notes (may lag `digest-core`; prefer `ARCHITECTURE.md` for the Python package)
+
+> **`Bus_Req_v5.md` / `Tech_details_v1.md`** are **not present** under `digest-core/docs/` in this repository (old references were stale).
 
 ## Language
 
@@ -38,11 +40,3 @@ Monorepo with one package. All development happens in `digest-core/`.
 - **Mattermost**: accessible from everywhere (delivery target).
 - **Dev workflow**: "Code outside, run inside, debug outside" (ADR-012).
 - Use `--dump-ingest` / `--replay-ingest` for offline development.
-
-## Git Preflight
-
-- Always run `git fetch origin --prune` before implementation work, Plane updates, or PR creation.
-- Work only from a real branch cut from current `origin/main`; never from detached `HEAD`.
-- If the current worktree cannot fetch because git metadata is outside the writable sandbox, create a fresh clone/worktree inside the writable workspace and continue there.
-- Do not update Plane or open a PR until the branch base and baseline checks are verified on the exact branch that will be used.
-- If a PR was opened from stale `main`, close it and restack from fresh `origin/main` instead of trying to salvage bad history.

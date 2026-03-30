@@ -714,14 +714,11 @@ digest-core/
 │   └── Dockerfile                 # Multi-stage, non-root (UID 1001)
 ├── docs/
 │   ├── ARCHITECTURE.md            # THIS FILE
-│   ├── Bus_Req_v5.md              # Original business requirements
-│   ├── Tech_details_v1.md         # Original technical spec
-│   └── testing/
-│       ├── MANUAL_TESTING_CHECKLIST.md
-│       └── SEND_RESULTS.md
+│   └── PHASE0_PROMPT.md           # Historical Phase 0 backlog prompt (snapshot)
 ├── prompts/
-│   ├── extract_actions.v1.j2      # RU extraction prompt
-│   └── extract_actions.en.v1.j2   # EN extraction prompt
+│   ├── extract_actions.v1.txt     # RU extraction prompt (plain text)
+│   ├── extract_actions.en.v1.txt  # EN extraction prompt
+│   └── thread_summarize/v1/default.j2  # Used by hierarchical path via registry
 ├── scripts/
 │   ├── run-local.sh               # Local execution helper
 │   ├── test.sh, lint.sh           # Dev scripts
@@ -786,6 +783,8 @@ digest-core/
 ├── Makefile                       # Dev workflow targets
 └── README.md
 ```
+
+**Документы снаружи `digest-core/docs/`:** в корне монорепозитория см. `docs/planning/BUSINESS_REQUIREMENTS.md`, `docs/development/TECHNICAL.md`, каталог `docs/testing/`. Файлы с историческими именами `Bus_Req_v5.md` и `Tech_details_v1.md` в дереве не версионируются (ссылки на них в старых инструкциях были устаревшими).
 
 ---
 

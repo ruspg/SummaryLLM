@@ -17,9 +17,7 @@ class Citation(BaseModel):
     msg_id: str = Field(description="Message ID reference")
     start: int = Field(ge=0, description="Start offset in normalized text")
     end: int = Field(gt=0, description="End offset in normalized text")
-    preview: str = Field(
-        max_length=200, description="Text preview text[start:end] for validation"
-    )
+    preview: str = Field(max_length=200, description="Text preview text[start:end] for validation")
     checksum: Optional[str] = Field(
         None, description="SHA-256 of normalized email body for integrity check"
     )
@@ -61,15 +59,11 @@ class ActionItem(BaseModel):
     description: str = Field(description="Detailed description")
     evidence_id: str = Field(description="Evidence ID reference")
     quote: str = Field(description="1-2 sentence quote from evidence")
-    due_date: Optional[str] = Field(
-        None, description="ISO-8601 date or 'today'/'tomorrow'"
-    )
+    due_date: Optional[str] = Field(None, description="ISO-8601 date or 'today'/'tomorrow'")
     due_date_normalized: Optional[str] = Field(
         None, description="ISO-8601 with TZ America/Sao_Paulo"
     )
-    due_date_label: Optional[str] = Field(
-        None, description="'today'/'tomorrow' if applicable"
-    )
+    due_date_label: Optional[str] = Field(None, description="'today'/'tomorrow' if applicable")
     actors: List[str] = Field(default_factory=list, description="People involved")
     confidence: str = Field(description="High/Medium/Low")
     response_channel: Optional[str] = Field(None, description="email/slack/meeting")
@@ -89,9 +83,7 @@ class DeadlineMeeting(BaseModel):
     evidence_id: str
     quote: str
     date_time: str = Field(description="ISO-8601 with TZ")
-    date_label: Optional[str] = Field(
-        None, description="'today'/'tomorrow' if applicable"
-    )
+    date_label: Optional[str] = Field(None, description="'today'/'tomorrow' if applicable")
     location: Optional[str] = None
     participants: List[str] = Field(default_factory=list)
     email_subject: Optional[str] = Field(default=None)
@@ -192,16 +184,10 @@ class ActionItemV3(BaseModel):
     description: str = Field(description="Detailed description")
     evidence_id: str = Field(description="Evidence ID reference")
     quote: str = Field(description="1-2 sentence quote from evidence")
-    due_date: Optional[str] = Field(
-        None, description="ISO-8601 date or 'today'/'tomorrow'"
-    )
+    due_date: Optional[str] = Field(None, description="ISO-8601 date or 'today'/'tomorrow'")
     due_date_normalized: Optional[str] = Field(None, description="ISO-8601 with TZ")
-    due_date_label: Optional[str] = Field(
-        None, description="'today'/'tomorrow' if applicable"
-    )
-    owners: List[str] = Field(
-        default_factory=list, description="Owners/responsible parties"
-    )
+    due_date_label: Optional[str] = Field(None, description="'today'/'tomorrow' if applicable")
+    owners: List[str] = Field(default_factory=list, description="Owners/responsible parties")
     confidence: str = Field(description="High/Medium/Low")
     response_channel: Optional[str] = Field(None, description="email/slack/meeting")
 
@@ -213,13 +199,9 @@ class DeadlineMeetingV3(BaseModel):
     evidence_id: str
     quote: str
     date_time: str = Field(description="ISO-8601 with TZ")
-    date_label: Optional[str] = Field(
-        None, description="'today'/'tomorrow' if applicable"
-    )
+    date_label: Optional[str] = Field(None, description="'today'/'tomorrow' if applicable")
     location: Optional[str] = None
-    participants: List[str] = Field(
-        default_factory=list, description="Meeting participants"
-    )
+    participants: List[str] = Field(default_factory=list, description="Meeting participants")
 
 
 class RiskBlockerV3(BaseModel):
@@ -230,9 +212,7 @@ class RiskBlockerV3(BaseModel):
     quote: str
     severity: str = Field(description="High/Medium/Low")
     impact: str
-    owners: List[str] = Field(
-        default_factory=list, description="Owners/responsible parties"
-    )
+    owners: List[str] = Field(default_factory=list, description="Owners/responsible parties")
 
 
 class FYIItemV3(BaseModel):
@@ -291,9 +271,7 @@ class ThreadDeadline(BaseModel):
     title: str = Field(description="Deadline title")
     date_time: str = Field(description="ISO-8601 datetime")
     evidence_id: str = Field(description="Evidence ID reference")
-    quote: str = Field(
-        min_length=10, max_length=150, description="Short quote from evidence"
-    )
+    quote: str = Field(min_length=10, max_length=150, description="Short quote from evidence")
     citations: List[Citation] = Field(
         default_factory=list, description="Evidence citations with validated offsets"
     )
@@ -303,9 +281,7 @@ class ThreadSummary(BaseModel):
     """Per-thread mini-summary output."""
 
     thread_id: str = Field(description="Thread/conversation ID")
-    summary: str = Field(
-        max_length=600, description="Brief summary ≤200 tokens (up to 600 chars)"
-    )
+    summary: str = Field(max_length=600, description="Brief summary ≤200 tokens (up to 600 chars)")
     pending_actions: List[ThreadAction] = Field(
         default_factory=list, description="Actions from this thread"
     )
@@ -313,9 +289,7 @@ class ThreadSummary(BaseModel):
         default_factory=list, description="Deadlines from this thread"
     )
     who_must_act: List[str] = Field(default_factory=list, description="user/others")
-    open_questions: List[str] = Field(
-        default_factory=list, description="Unresolved questions"
-    )
+    open_questions: List[str] = Field(default_factory=list, description="Unresolved questions")
     evidence_ids: List[str] = Field(
         default_factory=list, description="All evidence IDs in this thread"
     )

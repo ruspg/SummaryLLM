@@ -188,9 +188,7 @@ class TestEvidenceChunkCreation:
 
     def test_addressed_to_me_false(self):
         """Test AddressedToMe when user is not in recipients."""
-        message = self.create_test_message(
-            to_recipients=["other@example.com"], cc_recipients=[]
-        )
+        message = self.create_test_message(to_recipients=["other@example.com"], cc_recipients=[])
 
         thread = ConversationThread(
             conversation_id="conv-1",

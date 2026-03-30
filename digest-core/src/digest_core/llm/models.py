@@ -153,8 +153,8 @@ def call_llm_and_parse(
 
             # Add hint to prompt on retry
             if attempt < max_retries:
-                prompt += "\n\nIMPORTANT: Return ONLY valid JSON per schema. No markdown, no code blocks."
+                prompt += (
+                    "\n\nIMPORTANT: Return ONLY valid JSON per schema. No markdown, no code blocks."
+                )
 
-    raise RuntimeError(
-        f"LLM returned invalid JSON after {max_retries} retries: {last_error}"
-    )
+    raise RuntimeError(f"LLM returned invalid JSON after {max_retries} retries: {last_error}")

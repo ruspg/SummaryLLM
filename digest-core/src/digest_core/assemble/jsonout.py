@@ -33,9 +33,7 @@ class JSONAssembler:
 
             # Write to file with proper encoding
             with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(
-                    digest_dict, f, indent=self.indent, ensure_ascii=self.ensure_ascii
-                )
+                json.dump(digest_dict, f, indent=self.indent, ensure_ascii=self.ensure_ascii)
 
             logger.info(
                 "JSON digest written successfully",
@@ -76,9 +74,7 @@ class JSONAssembler:
                 }
                 for section in digest_data.sections
             ],
-            "total_emails_processed": getattr(
-                digest_data, "total_emails_processed", None
-            ),
+            "total_emails_processed": getattr(digest_data, "total_emails_processed", None),
             "emails_with_actions": getattr(digest_data, "emails_with_actions", None),
         }
         return result
@@ -107,9 +103,7 @@ class JSONAssembler:
             return digest_data
 
         except Exception as e:
-            logger.error(
-                "Failed to read JSON digest", input_path=str(input_path), error=str(e)
-            )
+            logger.error("Failed to read JSON digest", input_path=str(input_path), error=str(e))
             raise
 
     def _dict_to_digest(self, digest_dict: Dict[str, Any]) -> Digest:
@@ -159,9 +153,7 @@ class JSONAssembler:
 
                 datetime.strptime(digest_data.digest_date, "%Y-%m-%d")
             except ValueError:
-                logger.warning(
-                    "Invalid digest_date format", date=digest_data.digest_date
-                )
+                logger.warning("Invalid digest_date format", date=digest_data.digest_date)
                 return False
 
             # Check sections
@@ -208,9 +200,7 @@ class JSONAssembler:
             return False
 
         # Confidence validation
-        if not isinstance(item.confidence, (int, float)) or not (
-            0 <= item.confidence <= 1
-        ):
+        if not isinstance(item.confidence, (int, float)) or not (0 <= item.confidence <= 1):
             logger.warning(
                 "Item confidence must be a number between 0 and 1",
                 confidence=item.confidence,

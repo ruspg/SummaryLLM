@@ -307,9 +307,7 @@ def test_pipeline_replay_runs_from_repo_root(monkeypatch, tmp_path):
         replay_ingest=str(snapshot_path),
     )
 
-    payload = json.loads(
-        (out_dir / "digest-2026-03-29.json").read_text(encoding="utf-8")
-    )
+    payload = json.loads((out_dir / "digest-2026-03-29.json").read_text(encoding="utf-8"))
 
     assert result is True
     assert [section["title"] for section in payload["sections"]] == [
@@ -341,9 +339,7 @@ def test_pipeline_writes_partial_digest_on_llm_failure(monkeypatch, tmp_path):
         replay_ingest=str(snapshot_path),
     )
 
-    payload = json.loads(
-        (out_dir / "digest-2026-03-29.json").read_text(encoding="utf-8")
-    )
+    payload = json.loads((out_dir / "digest-2026-03-29.json").read_text(encoding="utf-8"))
 
     assert result is True
     assert payload["sections"][0]["title"] == "Статус"
@@ -372,9 +368,7 @@ def test_export_diagnostics_creates_bundle(monkeypatch, tmp_path):
         "evidence_summary": {"chunk_count": 1},
         "ews_fetch_stats": {"message_count": 1},
         "llm_request_trace": {"retry_count": 0},
-        "config_sanitized": {
-            "deliver": {"mattermost": {"webhook_url_env": "MM_WEBHOOK_URL"}}
-        },
+        "config_sanitized": {"deliver": {"mattermost": {"webhook_url_env": "MM_WEBHOOK_URL"}}},
     }
     (tmp_path / "trace-trace-export.meta.json").write_text(
         json.dumps(metadata, ensure_ascii=False),

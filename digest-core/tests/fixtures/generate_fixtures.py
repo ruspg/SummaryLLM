@@ -15,9 +15,7 @@ def create_sample_emails():
     email1 = {
         "msg_id": "msg-001",
         "conversation_id": "conv-001",
-        "datetime_received": (
-            datetime.now(timezone.utc) - timedelta(hours=2)
-        ).isoformat(),
+        "datetime_received": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
         "sender": {"email_address": "manager@company.com"},
         "subject": "URGENT: Server Maintenance Required",
         "text_body": """
@@ -36,9 +34,7 @@ def create_sample_emails():
     email2 = {
         "msg_id": "msg-002",
         "conversation_id": "conv-002",
-        "datetime_received": (
-            datetime.now(timezone.utc) - timedelta(hours=4)
-        ).isoformat(),
+        "datetime_received": (datetime.now(timezone.utc) - timedelta(hours=4)).isoformat(),
         "sender": {"email_address": "colleague@company.com"},
         "subject": "Meeting: Q4 Review",
         "text_body": """
@@ -57,9 +53,7 @@ def create_sample_emails():
     email3 = {
         "msg_id": "msg-003",
         "conversation_id": "conv-003",
-        "datetime_received": (
-            datetime.now(timezone.utc) - timedelta(hours=6)
-        ).isoformat(),
+        "datetime_received": (datetime.now(timezone.utc) - timedelta(hours=6)).isoformat(),
         "sender": {"email_address": "user@company.com"},
         "subject": "Out of Office",
         "text_body": """
@@ -76,9 +70,7 @@ def create_sample_emails():
     email4 = {
         "msg_id": "msg-004",
         "conversation_id": "conv-004",
-        "datetime_received": (
-            datetime.now(timezone.utc) - timedelta(hours=8)
-        ).isoformat(),
+        "datetime_received": (datetime.now(timezone.utc) - timedelta(hours=8)).isoformat(),
         "sender": {"email_address": "team@company.com"},
         "subject": "Project Discussion",
         "text_body": """
@@ -104,9 +96,7 @@ def create_sample_emails():
     email5 = {
         "msg_id": "msg-005",
         "conversation_id": "conv-005",
-        "datetime_received": (
-            datetime.now(timezone.utc) - timedelta(hours=10)
-        ).isoformat(),
+        "datetime_received": (datetime.now(timezone.utc) - timedelta(hours=10)).isoformat(),
         "sender": {"email_address": "system@company.com"},
         "subject": "Delivery Status Notification",
         "text_body": """

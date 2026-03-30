@@ -251,24 +251,12 @@ class ActionMentionExtractor:
 
     def _compile_patterns(self):
         """Compile all regex patterns."""
-        self.ru_imperative_pattern = re.compile(
-            "|".join(self.RU_IMPERATIVE_VERBS), re.IGNORECASE
-        )
-        self.en_imperative_pattern = re.compile(
-            "|".join(self.EN_IMPERATIVE_VERBS), re.IGNORECASE
-        )
-        self.ru_action_pattern = re.compile(
-            "|".join(self.RU_ACTION_MARKERS), re.IGNORECASE
-        )
-        self.en_action_pattern = re.compile(
-            "|".join(self.EN_ACTION_MARKERS), re.IGNORECASE
-        )
-        self.ru_question_pattern = re.compile(
-            "|".join(self.RU_QUESTION_MARKERS), re.IGNORECASE
-        )
-        self.en_question_pattern = re.compile(
-            "|".join(self.EN_QUESTION_MARKERS), re.IGNORECASE
-        )
+        self.ru_imperative_pattern = re.compile("|".join(self.RU_IMPERATIVE_VERBS), re.IGNORECASE)
+        self.en_imperative_pattern = re.compile("|".join(self.EN_IMPERATIVE_VERBS), re.IGNORECASE)
+        self.ru_action_pattern = re.compile("|".join(self.RU_ACTION_MARKERS), re.IGNORECASE)
+        self.en_action_pattern = re.compile("|".join(self.EN_ACTION_MARKERS), re.IGNORECASE)
+        self.ru_question_pattern = re.compile("|".join(self.RU_QUESTION_MARKERS), re.IGNORECASE)
+        self.en_question_pattern = re.compile("|".join(self.EN_QUESTION_MARKERS), re.IGNORECASE)
         self.date_pattern = re.compile("|".join(self.DATE_PATTERNS), re.IGNORECASE)
 
     def extract_mentions_actions(
@@ -319,12 +307,7 @@ class ActionMentionExtractor:
             deadline = self._extract_deadline(sentence)
 
             # Skip if no actionable content
-            if not (
-                has_user_mention
-                or imperative_match
-                or action_marker_match
-                or is_question
-            ):
+            if not (has_user_mention or imperative_match or action_marker_match or is_question):
                 continue
 
             # Determine action type and verb
@@ -371,9 +354,7 @@ class ActionMentionExtractor:
             "Extracted actions/mentions",
             msg_id=msg_id,
             total_actions=len(actions),
-            avg_confidence=(
-                sum(a.confidence for a in actions) / len(actions) if actions else 0
-            ),
+            avg_confidence=(sum(a.confidence for a in actions) / len(actions) if actions else 0),
         )
 
         return actions
@@ -413,11 +394,7 @@ class ActionMentionExtractor:
             return False
 
         suffix = text_lower[match.end() :].lstrip()
-        if (
-            suffix.startswith("team")
-            or suffix.startswith("group")
-            or suffix.startswith("dept")
-        ):
+        if suffix.startswith("team") or suffix.startswith("group") or suffix.startswith("dept"):
             return False
 
         return True

@@ -14,20 +14,15 @@ def test_shortcut_when_no_evidence_selected():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # Mock all the components
-        with patch.object(runner, "Config") as mock_config, patch.object(
-            runner, "EWSIngest"
-        ) as mock_ingest, patch.object(
-            runner, "ThreadBuilder"
-        ) as mock_thread_builder, patch.object(
-            runner, "EvidenceSplitter"
-        ) as mock_splitter, patch.object(
-            runner, "ContextSelector"
-        ) as mock_selector, patch.object(
-            runner, "LLMGateway"
-        ), patch.object(
-            runner, "MetricsCollector"
-        ) as mock_metrics, patch.object(
-            runner, "start_health_server"
+        with (
+            patch.object(runner, "Config") as mock_config,
+            patch.object(runner, "EWSIngest") as mock_ingest,
+            patch.object(runner, "ThreadBuilder") as mock_thread_builder,
+            patch.object(runner, "EvidenceSplitter") as mock_splitter,
+            patch.object(runner, "ContextSelector") as mock_selector,
+            patch.object(runner, "LLMGateway"),
+            patch.object(runner, "MetricsCollector") as mock_metrics,
+            patch.object(runner, "start_health_server"),
         ):
 
             # Setup mocks

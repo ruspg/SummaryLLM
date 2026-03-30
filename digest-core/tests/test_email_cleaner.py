@@ -374,9 +374,7 @@ class TestEmailCleanerComplexCases:
         removal_rate = 1.0 - (len(cleaned) / len(original))
 
         # DoD requirement: ≥40% removal on reply-heavy cases
-        assert (
-            removal_rate >= 0.40
-        ), f"Removal rate {removal_rate:.2%} < 40% (DoD requirement)"
+        assert removal_rate >= 0.40, f"Removal rate {removal_rate:.2%} < 40% (DoD requirement)"
 
         # Main content should be preserved
         assert "Одобряю предложение" in cleaned
@@ -395,9 +393,7 @@ class TestEmailCleanerComplexCases:
 
         removal_rate = 1.0 - (len(cleaned) / len(original))
 
-        assert (
-            removal_rate >= 0.40
-        ), f"Removal rate {removal_rate:.2%} < 40% (DoD requirement)"
+        assert removal_rate >= 0.40, f"Removal rate {removal_rate:.2%} < 40% (DoD requirement)"
 
         assert "approve the Q4 budget" in cleaned
         assert "coordinate with finance" in cleaned

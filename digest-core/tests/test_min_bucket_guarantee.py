@@ -76,9 +76,7 @@ def test_deadline_always_included():
 
     # Verify deadline chunk is included despite low score
     selected_ids = [c.evidence_id for c in selected]
-    assert (
-        "ev-deadline" in selected_ids
-    ), "Deadline chunk must be included even with low score"
+    assert "ev-deadline" in selected_ids, "Deadline chunk must be included even with low score"
 
     # Verify at least 1 from dates_deadlines bucket
     metrics = selector.get_metrics()
@@ -112,9 +110,7 @@ def test_addressed_to_me_always_included():
 
     # Verify addressed_to_me chunk is included despite low score
     selected_ids = [c.evidence_id for c in selected]
-    assert (
-        "ev-tome" in selected_ids
-    ), "addressed_to_me chunk must be included even with low score"
+    assert "ev-tome" in selected_ids, "addressed_to_me chunk must be included even with low score"
 
     # Verify at least 1 from addressed_to_me bucket
     metrics = selector.get_metrics()
@@ -142,9 +138,7 @@ def test_deduplication_by_msg_id_start_end():
     selected_ids = [c.evidence_id for c in selected]
 
     # ev-2 should be deduplicated (same msg_id, start, end as ev-1)
-    assert (
-        "ev-2" not in selected_ids
-    ), "Duplicate (msg_id, start, end) should be removed"
+    assert "ev-2" not in selected_ids, "Duplicate (msg_id, start, end) should be removed"
 
     # ev-1, ev-3, ev-4 should all be included (different keys)
     assert "ev-1" in selected_ids, "First chunk should be selected"

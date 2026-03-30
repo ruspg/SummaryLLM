@@ -27,9 +27,7 @@ class TestEWSConfig:
         """Test password retrieval failure when env var not set."""
         with patch.dict(os.environ, {}, clear=True):
             config = EWSConfig()
-            with pytest.raises(
-                ValueError, match="Environment variable EWS_PASSWORD not set"
-            ):
+            with pytest.raises(ValueError, match="Environment variable EWS_PASSWORD not set"):
                 config.get_password()
 
     def test_get_ntlm_username_with_login_domain(self):
@@ -68,9 +66,7 @@ class TestLLMConfig:
         """Test token retrieval failure when env var not set."""
         with patch.dict(os.environ, {}, clear=True):
             config = LLMConfig()
-            with pytest.raises(
-                ValueError, match="Environment variable LLM_TOKEN not set"
-            ):
+            with pytest.raises(ValueError, match="Environment variable LLM_TOKEN not set"):
                 config.get_token()
 
 

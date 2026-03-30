@@ -130,9 +130,7 @@ def _run_pipeline(
     if state:
         state_dir = Path(state).expanduser()
         state_dir.mkdir(parents=True, exist_ok=True)
-        config.ews.sync_state_path = str(
-            state_dir / Path(config.ews.sync_state_path).name
-        )
+        config.ews.sync_state_path = str(state_dir / Path(config.ews.sync_state_path).name)
 
     metrics = MetricsCollector(config.observability.prometheus_port)
     start_health_server(port=9109, llm_config=config.llm)
@@ -197,9 +195,7 @@ def _run_pipeline(
     try:
         if replay_ingest:
             replay_start = time.perf_counter()
-            normalized_messages = _load_ingest_snapshot(
-                Path(replay_ingest).expanduser()
-            )
+            normalized_messages = _load_ingest_snapshot(Path(replay_ingest).expanduser())
             messages = normalized_messages
             _record_stage_duration(run_meta, metrics, "ingest", replay_start)
             run_meta["ews_fetch_stats"] = {
@@ -360,14 +356,12 @@ def _run_pipeline(
         if config.deliver.mattermost.enabled:
             deliver_start = time.perf_counter()
             try:
-                delivery_receipt = MattermostDeliverer(
-                    config.deliver.mattermost
-                ).deliver_digest(digest)
+                delivery_receipt = MattermostDeliverer(config.deliver.mattermost).deliver_digest(
+                    digest
+                )
             except Exception as exc:
                 delivery_receipt = {"status": "warning", "error": str(exc)}
-                logger.warning(
-                    "Mattermost delivery failed", trace_id=trace_id, error=str(exc)
-                )
+                logger.warning("Mattermost delivery failed", trace_id=trace_id, error=str(exc))
             _record_stage_duration(run_meta, metrics, "deliver", deliver_start)
         run_meta["delivery_receipt"] = delivery_receipt
 
@@ -396,9 +390,7 @@ def _run_pipeline(
         run_meta["status"] = "failed"
         run_meta["error"] = str(exc)
         _write_json(metadata_path, run_meta)
-        logger.error(
-            "Digest run failed", trace_id=trace_id, error=str(exc), exc_info=True
-        )
+        logger.error("Digest run failed", trace_id=trace_id, error=str(exc), exc_info=True)
         raise
 
 
@@ -467,9 +459,7 @@ def _normalize_messages(
 
 def _load_extract_prompt(model_name: str) -> tuple[str, str]:
     model_lower = (model_name or "").lower()
-    prompt_version = (
-        "extract_actions.en.v1" if "qwen" in model_lower else "extract_actions.v1"
-    )
+    prompt_version = "extract_actions.en.v1" if "qwen" in model_lower else "extract_actions.v1"
     template_path = get_prompt_template_path(prompt_version)
     prompt_path = PROMPTS_DIR / template_path
     return prompt_version, prompt_path.read_text(encoding="utf-8")
@@ -485,9 +475,7 @@ def _build_empty_digest(digest_date: str, trace_id: str, prompt_version: str) ->
     )
 
 
-def _build_partial_digest(
-    digest_date: str, trace_id: str, error_message: str
-) -> Digest:
+def _build_partial_digest(digest_date: str, trace_id: str, error_message: str) -> Digest:
     title = "LLM Gateway недоступен. Дайджест неполный."
     if "timed out" in error_message.lower() or "timeout" in error_message.lower():
         title = "LLM Gateway превысил таймаут. Дайджест неполный."
@@ -578,9 +566,7 @@ def _build_evidence_summary(
 ) -> Dict[str, Any]:
     chunk_counts: Dict[str, int] = {}
     for chunk in evidence_chunks:
-        chunk_counts[chunk.conversation_id] = (
-            chunk_counts.get(chunk.conversation_id, 0) + 1
-        )
+        chunk_counts[chunk.conversation_id] = chunk_counts.get(chunk.conversation_id, 0) + 1
 
     return {
         "chunk_count": len(evidence_chunks),

@@ -44,9 +44,7 @@ class CitationBuilder:
             # Extract msg_id from source_ref
             msg_id = chunk.source_ref.get("msg_id")
             if not msg_id:
-                logger.warning(
-                    "Missing msg_id in source_ref", evidence_id=chunk.evidence_id
-                )
+                logger.warning("Missing msg_id in source_ref", evidence_id=chunk.evidence_id)
                 return None
 
             # Get normalized message body
@@ -93,9 +91,7 @@ class CitationBuilder:
             return citation
 
         except Exception as e:
-            logger.error(
-                "Failed to build citation", evidence_id=chunk.evidence_id, error=str(e)
-            )
+            logger.error("Failed to build citation", evidence_id=chunk.evidence_id, error=str(e))
             return None
 
     def build_citations_for_chunks(self, chunks: List[EvidenceChunk]) -> List[Citation]:
@@ -242,9 +238,7 @@ class CitationValidator:
 
             # Validate checksum if provided
             if citation.checksum:
-                expected_checksum = hashlib.sha256(
-                    normalized_body.encode("utf-8")
-                ).hexdigest()
+                expected_checksum = hashlib.sha256(normalized_body.encode("utf-8")).hexdigest()
                 if citation.checksum != expected_checksum:
                     return False, f"Checksum mismatch for msg_id={citation.msg_id}"
 
@@ -253,9 +247,7 @@ class CitationValidator:
         except Exception as e:
             return False, f"Validation exception: {str(e)}"
 
-    def validate_citations(
-        self, citations: List[Citation], strict: bool = True
-    ) -> bool:
+    def validate_citations(self, citations: List[Citation], strict: bool = True) -> bool:
         """
         Validate multiple citations.
 
@@ -321,9 +313,7 @@ def enrich_item_with_citations(
     matching_chunks = [c for c in evidence_chunks if c.evidence_id == item.evidence_id]
 
     if not matching_chunks:
-        logger.warning(
-            "No matching chunks for evidence_id", evidence_id=item.evidence_id
-        )
+        logger.warning("No matching chunks for evidence_id", evidence_id=item.evidence_id)
         return
 
     # Build citations for matching chunks
@@ -333,6 +323,4 @@ def enrich_item_with_citations(
             item.citations.append(citation)
 
     if not item.citations:
-        logger.warning(
-            "Failed to build any citations for item", evidence_id=item.evidence_id
-        )
+        logger.warning("Failed to build any citations for item", evidence_id=item.evidence_id)

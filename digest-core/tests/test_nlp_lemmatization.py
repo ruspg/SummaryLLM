@@ -138,9 +138,7 @@ class TestActionExtractionWithLemmatization:
 
         # Present tense
         text1 = "Please check the document."
-        actions1 = extractor.extract_mentions_actions(
-            text1, "msg1", "sender@example.com"
-        )
+        actions1 = extractor.extract_mentions_actions(text1, "msg1", "sender@example.com")
         assert len(actions1) > 0
 
         # Past tense
@@ -159,23 +157,17 @@ class TestActionExtractionWithLemmatization:
 
         # Imperative singular
         text1 = "Проверь документ."
-        actions1 = extractor.extract_mentions_actions(
-            text1, "msg1", "sender@example.com"
-        )
+        actions1 = extractor.extract_mentions_actions(text1, "msg1", "sender@example.com")
         assert len(actions1) > 0, "Should detect imperative singular 'проверь'"
 
         # Imperative plural
         text2 = "Проверьте документ, пожалуйста."
-        actions2 = extractor.extract_mentions_actions(
-            text2, "msg2", "sender@example.com"
-        )
+        actions2 = extractor.extract_mentions_actions(text2, "msg2", "sender@example.com")
         assert len(actions2) > 0, "Should detect imperative plural 'проверьте'"
 
         # Future tense with need
         text3 = "Нужно проверить документ."
-        actions3 = extractor.extract_mentions_actions(
-            text3, "msg3", "sender@example.com"
-        )
+        actions3 = extractor.extract_mentions_actions(text3, "msg3", "sender@example.com")
         assert len(actions3) > 0, "Should detect 'нужно проверить'"
 
     def test_lemmatization_increases_recall(self):
@@ -196,9 +188,7 @@ class TestActionExtractionWithLemmatization:
 
         detected_count = 0
         for text in test_cases_ru:
-            actions = extractor.extract_mentions_actions(
-                text, "msg", "sender@example.com"
-            )
+            actions = extractor.extract_mentions_actions(text, "msg", "sender@example.com")
             if len(actions) > 0:
                 detected_count += 1
 
@@ -272,18 +262,14 @@ class TestRecallPrecisionGoals:
 
         detected = 0
         for text, is_action in gold_set:
-            actions = extractor.extract_mentions_actions(
-                text, "msg", "sender@example.com"
-            )
+            actions = extractor.extract_mentions_actions(text, "msg", "sender@example.com")
             if len(actions) > 0:
                 detected += 1
 
         recall = detected / len(gold_set)
 
         # Goal: recall ≥ 0.85 (assuming baseline ~0.73, improvement +12 п.п.)
-        assert (
-            recall >= 0.80
-        ), f"RU recall {recall:.2%} should be ≥80% with lemmatization"
+        assert recall >= 0.80, f"RU recall {recall:.2%} should be ≥80% with lemmatization"
 
         print(f"\nRU Recall: {detected}/{len(gold_set)} = {recall:.2%}")
 
@@ -315,9 +301,7 @@ class TestRecallPrecisionGoals:
         false_negatives = 0
 
         for text, is_action in test_cases:
-            actions = extractor.extract_mentions_actions(
-                text, "msg", "sender@example.com"
-            )
+            actions = extractor.extract_mentions_actions(text, "msg", "sender@example.com")
             detected = len(actions) > 0
 
             if is_action and detected:
@@ -343,12 +327,8 @@ class TestRecallPrecisionGoals:
         # Goal: precision ≥ 0.80 (with ≤3 п.п. drop from baseline ~0.83)
         assert precision >= 0.75, f"Precision {precision:.2%} should be ≥75%"
 
-        print(
-            f"\nPrecision: {true_positives}/{true_positives + false_positives} = {precision:.2%}"
-        )
-        print(
-            f"Recall: {true_positives}/{true_positives + false_negatives} = {recall:.2%}"
-        )
+        print(f"\nPrecision: {true_positives}/{true_positives + false_positives} = {precision:.2%}")
+        print(f"Recall: {true_positives}/{true_positives + false_negatives} = {recall:.2%}")
         print(
             f"TP={true_positives}, FP={false_positives}, TN={true_negatives}, FN={false_negatives}"
         )

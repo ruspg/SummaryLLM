@@ -18,7 +18,7 @@ def _mock_response(
     status_code: int = 200,
     prompt_tokens: int = 100,
     completion_tokens: int = 50,
-    headers: dict | None = None
+    headers: dict | None = None,
 ) -> Mock:
     response = Mock()
     response.status_code = status_code
@@ -66,9 +66,7 @@ def test_quality_retry_empty_sections(gateway):
     gateway.client.post = Mock(side_effect=[empty_response, content_response])
 
     evidence = [
-        EvidenceChunk(
-            evidence_id="ev-1", content="Important action item", priority_score=2.0
-        )
+        EvidenceChunk(evidence_id="ev-1", content="Important action item", priority_score=2.0)
     ]
     result = gateway.extract_actions(evidence, "Return strict JSON", "test-trace-id")
 
@@ -263,9 +261,7 @@ class TestLLMReplayMode:
         )
         gw = LLMGateway(config, record_llm=str(record_file))
 
-        resp = _mock_response(
-            '{"sections":[]}', prompt_tokens=100, completion_tokens=50
-        )
+        resp = _mock_response('{"sections":[]}', prompt_tokens=100, completion_tokens=50)
         gw.client.post = Mock(return_value=resp)
 
         gw.extract_actions(self._make_evidence(), "Return strict JSON", "trace-rec")
@@ -308,9 +304,7 @@ class TestLLMReplayMode:
 
         # Should NOT make an HTTP call
         gw.client.post = Mock(side_effect=RuntimeError("should not be called"))
-        result = gw.extract_actions(
-            self._make_evidence(), "Return strict JSON", "trace-replay"
-        )
+        result = gw.extract_actions(self._make_evidence(), "Return strict JSON", "trace-replay")
         assert "sections" in result
         gw.client.post.assert_not_called()
 
@@ -328,6 +322,4 @@ class TestLLMReplayMode:
         gw = LLMGateway(config, replay_llm=str(replay_file))
 
         with pytest.raises(RuntimeError, match="replay exhausted"):
-            gw.extract_actions(
-                self._make_evidence(), "Return strict JSON", "trace-empty"
-            )
+            gw.extract_actions(self._make_evidence(), "Return strict JSON", "trace-empty")

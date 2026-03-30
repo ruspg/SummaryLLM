@@ -87,9 +87,7 @@ class ContextSelector:
             r"\b(delivery status|статус доставки)\b",
             r"\b(out of office|auto-reply|automatic reply)\b",
         ]
-        self.negative_regex = re.compile(
-            "|".join(self.negative_patterns), re.IGNORECASE
-        )
+        self.negative_regex = re.compile("|".join(self.negative_patterns), re.IGNORECASE)
 
         # Document attachment types
         self.doc_attachment_types = {"pdf", "doc", "docx", "xlsx", "xls", "ppt", "pptx"}
@@ -156,9 +154,7 @@ class ContextSelector:
 
         return selected_chunks
 
-    def _calculate_enhanced_scores(
-        self, chunks: List[EvidenceChunk]
-    ) -> List[EvidenceChunk]:
+    def _calculate_enhanced_scores(self, chunks: List[EvidenceChunk]) -> List[EvidenceChunk]:
         """Calculate enhanced scores for all chunks using configured weights."""
         scored_chunks = []
 
@@ -209,18 +205,14 @@ class ContextSelector:
             base_priority = getattr(chunk, "priority_score", 0.0)
             if not isinstance(base_priority, (int, float)):
                 base_priority = 0.0
-            score += (
-                base_priority * 0.1
-            )  # Small contribution to not lose original scoring
+            score += base_priority * 0.1  # Small contribution to not lose original scoring
 
             # 11. Negative priors (penalty)
             if self._has_negative_prior(chunk):
                 score += self.weights_config.negative_prior  # This is negative
 
             # Update chunk with new score
-            if callable(getattr(chunk, "_replace", None)) and not hasattr(
-                chunk, "_mock_methods"
-            ):
+            if callable(getattr(chunk, "_replace", None)) and not hasattr(chunk, "_mock_methods"):
                 updated_chunk = chunk._replace(priority_score=score)
             else:
                 chunk.priority_score = score
@@ -349,9 +341,7 @@ class ContextSelector:
             else:
                 bucket_dropped += 1
 
-        logger.info(
-            f"Bucket {bucket_name}: kept={bucket_kept}, dropped={bucket_dropped}"
-        )
+        logger.info(f"Bucket {bucket_name}: kept={bucket_kept}, dropped={bucket_dropped}")
 
         # Bucket 2: addressed_to_me - chunks addressed to user (min 1 if available)
         bucket_name = "addressed_to_me"
@@ -359,12 +349,8 @@ class ContextSelector:
         bucket_dropped = 0
         min_required = 1  # Ensure at least 1 if available
 
-        addressed_chunks = [
-            c for c in all_sorted if getattr(c, "addressed_to_me", False)
-        ]
-        addressed_chunks = sorted(
-            addressed_chunks, key=lambda c: c.priority_score, reverse=True
-        )
+        addressed_chunks = [c for c in all_sorted if getattr(c, "addressed_to_me", False)]
+        addressed_chunks = sorted(addressed_chunks, key=lambda c: c.priority_score, reverse=True)
 
         for chunk in addressed_chunks:
             # Skip if already selected
@@ -380,10 +366,7 @@ class ContextSelector:
                 continue
 
             # Check bucket limit (but ensure min 1)
-            if (
-                self.metrics.selected_by_bucket[bucket_name]
-                >= self.buckets_config.addressed_to_me
-            ):
+            if self.metrics.selected_by_bucket[bucket_name] >= self.buckets_config.addressed_to_me:
                 bucket_dropped += 1
                 break
 
@@ -405,9 +388,7 @@ class ContextSelector:
             else:
                 bucket_dropped += 1
 
-        logger.info(
-            f"Bucket {bucket_name}: kept={bucket_kept}, dropped={bucket_dropped}"
-        )
+        logger.info(f"Bucket {bucket_name}: kept={bucket_kept}, dropped={bucket_dropped}")
 
         # Bucket 3: dates_deadlines - chunks with dates/deadlines (min 1 if available)
         bucket_name = "dates_deadlines"
@@ -416,9 +397,7 @@ class ContextSelector:
         min_required = 1  # Ensure at least 1 if available
 
         date_chunks = [
-            c
-            for c in all_sorted
-            if len((getattr(c, "signals", {}) or {}).get("dates", [])) > 0
+            c for c in all_sorted if len((getattr(c, "signals", {}) or {}).get("dates", [])) > 0
         ]
         date_chunks = sorted(date_chunks, key=lambda c: c.priority_score, reverse=True)
 
@@ -436,10 +415,7 @@ class ContextSelector:
                 continue
 
             # Check bucket limit (but ensure min 1)
-            if (
-                self.metrics.selected_by_bucket[bucket_name]
-                >= self.buckets_config.dates_deadlines
-            ):
+            if self.metrics.selected_by_bucket[bucket_name] >= self.buckets_config.dates_deadlines:
                 bucket_dropped += 1
                 break
 
@@ -461,9 +437,7 @@ class ContextSelector:
             else:
                 bucket_dropped += 1
 
-        logger.info(
-            f"Bucket {bucket_name}: kept={bucket_kept}, dropped={bucket_dropped}"
-        )
+        logger.info(f"Bucket {bucket_name}: kept={bucket_kept}, dropped={bucket_dropped}")
 
         # Bucket 4: critical_senders - chunks from important senders (rank >= 2)
         bucket_name = "critical_senders"
@@ -471,13 +445,9 @@ class ContextSelector:
         bucket_dropped = 0
 
         critical_chunks = [
-            c
-            for c in all_sorted
-            if (getattr(c, "signals", {}) or {}).get("sender_rank", 1) >= 2
+            c for c in all_sorted if (getattr(c, "signals", {}) or {}).get("sender_rank", 1) >= 2
         ]
-        critical_chunks = sorted(
-            critical_chunks, key=lambda c: c.priority_score, reverse=True
-        )
+        critical_chunks = sorted(critical_chunks, key=lambda c: c.priority_score, reverse=True)
 
         for chunk in critical_chunks:
             # Skip if already selected
@@ -492,10 +462,7 @@ class ContextSelector:
                 bucket_dropped += 1
                 continue
 
-            if (
-                self.metrics.selected_by_bucket[bucket_name]
-                >= self.buckets_config.critical_senders
-            ):
+            if self.metrics.selected_by_bucket[bucket_name] >= self.buckets_config.critical_senders:
                 bucket_dropped += 1
                 break
 
@@ -515,9 +482,7 @@ class ContextSelector:
             else:
                 bucket_dropped += 1
 
-        logger.info(
-            f"Bucket {bucket_name}: kept={bucket_kept}, dropped={bucket_dropped}"
-        )
+        logger.info(f"Bucket {bucket_name}: kept={bucket_kept}, dropped={bucket_dropped}")
 
         # Bucket 5: remainder - fill up to max_total_chunks with general scoring
         bucket_name = "remainder"
@@ -525,9 +490,7 @@ class ContextSelector:
         bucket_dropped = 0
 
         remainder_chunks = [c for c in all_sorted]
-        remainder_chunks = sorted(
-            remainder_chunks, key=lambda c: c.priority_score, reverse=True
-        )
+        remainder_chunks = sorted(remainder_chunks, key=lambda c: c.priority_score, reverse=True)
 
         for chunk in remainder_chunks:
             # Skip if already selected
@@ -556,9 +519,7 @@ class ContextSelector:
             else:
                 bucket_dropped += 1
 
-        logger.info(
-            f"Bucket {bucket_name}: kept={bucket_kept}, dropped={bucket_dropped}"
-        )
+        logger.info(f"Bucket {bucket_name}: kept={bucket_kept}, dropped={bucket_dropped}")
 
         # Track discarded action-like chunks
         for chunk in scored_chunks:
@@ -618,9 +579,7 @@ class ContextSelector:
             return 1.0
         return 0.0
 
-    def _calculate_thread_activity(
-        self, message_count: int, _latest_message_time
-    ) -> float:
+    def _calculate_thread_activity(self, message_count: int, _latest_message_time) -> float:
         """Legacy thread activity helper."""
         return 1.0 if message_count > 1 else 0.0
 
@@ -659,9 +618,7 @@ class ContextSelector:
             chunk_to_bucket[id(chunk)] = bucket
 
         # Step 1: Remove remainder chunks with low score
-        remainder_chunks = [
-            c for c in selected if chunk_to_bucket[id(c)] == "remainder"
-        ]
+        remainder_chunks = [c for c in selected if chunk_to_bucket[id(c)] == "remainder"]
         remainder_chunks.sort(key=lambda c: c.priority_score)
 
         kept = [c for c in selected if chunk_to_bucket[id(c)] != "remainder"]
@@ -693,9 +650,7 @@ class ContextSelector:
 
             for bucket_name in bucket_order:
                 min_quota = getattr(self.buckets_config, bucket_name)
-                bucket_chunks = [
-                    c for c in kept if chunk_to_bucket[id(c)] == bucket_name
-                ]
+                bucket_chunks = [c for c in kept if chunk_to_bucket[id(c)] == bucket_name]
 
                 if len(bucket_chunks) > min_quota and current_tokens > max_tokens:
                     # Sort by score, keep min_quota best
@@ -714,9 +669,7 @@ class ContextSelector:
 
         # Step 4: Global low-score removal (preserve min quotas)
         if current_tokens > max_tokens:
-            kept = self._global_shrink_preserve_quotas(
-                kept, max_tokens, chunk_to_bucket
-            )
+            kept = self._global_shrink_preserve_quotas(kept, max_tokens, chunk_to_bucket)
             current_tokens = sum(c.token_count for c in kept)
 
         self.metrics.budget_applied = current_tokens

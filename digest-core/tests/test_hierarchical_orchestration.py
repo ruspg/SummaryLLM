@@ -89,9 +89,7 @@ class TestAutoEnableThresholds:
         should_use = processor.should_use_hierarchical(threads, emails)
         assert should_use is True, "Should enable with emails >= 300"
 
-    def test_no_auto_enable_below_thresholds(
-        self, hierarchical_config, mock_llm_gateway
-    ):
+    def test_no_auto_enable_below_thresholds(self, hierarchical_config, mock_llm_gateway):
         """Test no auto-enable when below both thresholds."""
         processor = HierarchicalProcessor(hierarchical_config, mock_llm_gateway)
 
@@ -127,11 +125,7 @@ class TestMustIncludeChunks:
         chunks = []
         for i in range(12):
             has_mention = i == 3 or i == 7
-            text = (
-                "User john@example.com please review"
-                if has_mention
-                else "Regular content"
-            )
+            text = "User john@example.com please review" if has_mention else "Regular content"
 
             chunk = EvidenceChunk(
                 evidence_id=f"ev{i}",
@@ -144,9 +138,7 @@ class TestMustIncludeChunks:
             chunks.append(chunk)
 
         user_aliases = ["john@example.com"]
-        selected = processor._select_chunks_with_must_include(
-            chunks, user_aliases, max_chunks=8
-        )
+        selected = processor._select_chunks_with_must_include(chunks, user_aliases, max_chunks=8)
 
         # Check that mention chunks are included
         selected_texts = [c.text for c in selected]
@@ -167,9 +159,7 @@ class TestMustIncludeChunks:
         # Create chunks with different timestamps
         chunks = []
         for i in range(10):
-            timestamp = (
-                now - timedelta(hours=10 - i)
-            ).isoformat()  # i=9 is most recent
+            timestamp = (now - timedelta(hours=10 - i)).isoformat()  # i=9 is most recent
             chunk = EvidenceChunk(
                 evidence_id=f"ev{i}",
                 msg_id=f"msg{i}",
@@ -180,17 +170,13 @@ class TestMustIncludeChunks:
             )
             chunks.append(chunk)
 
-        selected = processor._select_chunks_with_must_include(
-            chunks, user_aliases=[], max_chunks=5
-        )
+        selected = processor._select_chunks_with_must_include(chunks, user_aliases=[], max_chunks=5)
 
         # Last update chunk (i=9) should be included
         selected_ids = [c.evidence_id for c in selected]
         assert "ev9" in selected_ids, "Last update chunk should be included"
 
-    def test_exception_limit_with_many_must_include(
-        self, hierarchical_config, mock_llm_gateway
-    ):
+    def test_exception_limit_with_many_must_include(self, hierarchical_config, mock_llm_gateway):
         """Test that exception limit (12) is used when many must-include chunks."""
         processor = HierarchicalProcessor(hierarchical_config, mock_llm_gateway)
 
@@ -200,11 +186,7 @@ class TestMustIncludeChunks:
         chunks = []
         for i in range(15):
             has_mention = i < 10  # First 10 have mentions
-            text = (
-                f"User user@example.com content {i}"
-                if has_mention
-                else f"Regular content {i}"
-            )
+            text = f"User user@example.com content {i}" if has_mention else f"Regular content {i}"
 
             chunk = EvidenceChunk(
                 evidence_id=f"ev{i}",
@@ -283,9 +265,7 @@ class TestMergePolicy:
             )
             chunks.append(chunk)
 
-        citations = processor._extract_key_citations_from_chunks(
-            chunks, max_citations=5
-        )
+        citations = processor._extract_key_citations_from_chunks(chunks, max_citations=5)
 
         # Should have 5 citations
         assert len(citations) == 5, "Should extract 5 citations"
@@ -394,9 +374,7 @@ class TestMailExplosion:
         assert len(thread_chunks) == 100
 
         # Average chunks per thread
-        avg_chunks = sum(len(chunks) for chunks in thread_chunks.values()) / len(
-            thread_chunks
-        )
+        avg_chunks = sum(len(chunks) for chunks in thread_chunks.values()) / len(thread_chunks)
         assert 3 <= avg_chunks <= 10, f"Avg chunks per thread: {avg_chunks}"
 
 
@@ -448,9 +426,7 @@ class TestF1Preservation:
         )
 
         # All action chunks should be selected (within limit)
-        assert len(selected) == len(
-            chunks_with_actions
-        ), "All chunks should be selected"
+        assert len(selected) == len(chunks_with_actions), "All chunks should be selected"
 
         # Action text should be preserved
         for chunk in selected:

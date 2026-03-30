@@ -30,8 +30,7 @@ def create_test_message(
     return NormalizedMessage(
         msg_id=msg_id,
         conversation_id=conversation_id,
-        datetime_received=datetime.now(timezone.utc)
-        - timedelta(hours=time_offset_hours),
+        datetime_received=datetime.now(timezone.utc) - timedelta(hours=time_offset_hours),
         sender_email=sender,
         subject=f"Test Subject {conversation_id}",
         text_body=text_body,
@@ -57,9 +56,7 @@ def generate_email_load(num_emails: int, num_threads: int) -> list:
             # Vary content to simulate real emails
             if msg_idx % 5 == 0:
                 # Action email
-                text = "Please review and approve by Friday. " + " ".join(
-                    ["Details here"] * 50
-                )
+                text = "Please review and approve by Friday. " + " ".join(["Details here"] * 50)
                 importance = "High"
                 is_flagged = True
             elif msg_idx % 3 == 0:
@@ -117,9 +114,7 @@ class TestAdaptiveBudget:
             context_budget_config=context_budget,
             chunking_config=chunking,
         )
-        evidence_chunks = splitter.split_evidence(
-            threads, total_emails=100, total_threads=40
-        )
+        evidence_chunks = splitter.split_evidence(threads, total_emails=100, total_threads=40)
 
         # Select context
         selector = ContextSelector(
@@ -156,9 +151,7 @@ class TestAdaptiveBudget:
             context_budget_config=context_budget,
             chunking_config=chunking,
         )
-        evidence_chunks = splitter.split_evidence(
-            threads, total_emails=200, total_threads=60
-        )
+        evidence_chunks = splitter.split_evidence(threads, total_emails=200, total_threads=60)
 
         # Select context
         selector = ContextSelector(
@@ -199,9 +192,7 @@ class TestAdaptiveBudget:
             context_budget_config=context_budget,
             chunking_config=chunking,
         )
-        evidence_chunks = splitter.split_evidence(
-            threads, total_emails=300, total_threads=80
-        )
+        evidence_chunks = splitter.split_evidence(threads, total_emails=300, total_threads=80)
 
         # Select context
         selector = ContextSelector(
@@ -222,10 +213,7 @@ class TestAdaptiveBudget:
 
         # Min quotas preserved
         selected_by_bucket = metrics["selected_by_bucket"]
-        assert (
-            selected_by_bucket.get("threads_top", 0) >= 10
-            or metrics["covered_threads"] >= 10
-        )
+        assert selected_by_bucket.get("threads_top", 0) >= 10 or metrics["covered_threads"] >= 10
 
         # Thread coverage ≥90% (at least 72 out of 80 threads)
         # Since threads_top=10, we should have at least that many
@@ -254,9 +242,7 @@ class TestAdaptiveBudget:
             context_budget_config=context_budget,
             chunking_config=chunking,
         )
-        evidence_chunks = splitter.split_evidence(
-            threads, total_emails=400, total_threads=100
-        )
+        evidence_chunks = splitter.split_evidence(threads, total_emails=400, total_threads=100)
 
         # Select context
         selector = ContextSelector(
@@ -303,9 +289,7 @@ class TestAdaptiveBudget:
             context_budget_config=context_budget,
             chunking_config=chunking,
         )
-        evidence_chunks = splitter.split_evidence(
-            threads, total_emails=500, total_threads=120
-        )
+        evidence_chunks = splitter.split_evidence(threads, total_emails=500, total_threads=120)
 
         selector = ContextSelector(
             buckets_config=buckets,

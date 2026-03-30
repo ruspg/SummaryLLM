@@ -31,9 +31,7 @@ def export_diagnostics(
 
     bundle_trace_id = metadata["trace_id"]
     bundle_date = metadata["digest_date"]
-    archive_path = (
-        out_dir.expanduser() / f"diagnostic-{bundle_trace_id}-{bundle_date}.tar.gz"
-    )
+    archive_path = out_dir.expanduser() / f"diagnostic-{bundle_trace_id}-{bundle_date}.tar.gz"
     archive_path.parent.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -64,21 +62,15 @@ def export_diagnostics(
             encoding="utf-8",
         )
         (bundle_dir / "evidence-summary.json").write_text(
-            json.dumps(
-                metadata.get("evidence_summary", {}), indent=2, ensure_ascii=False
-            ),
+            json.dumps(metadata.get("evidence_summary", {}), indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
         (bundle_dir / "ews-fetch-stats.json").write_text(
-            json.dumps(
-                metadata.get("ews_fetch_stats", {}), indent=2, ensure_ascii=False
-            ),
+            json.dumps(metadata.get("ews_fetch_stats", {}), indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
         (bundle_dir / "llm-request-trace.json").write_text(
-            json.dumps(
-                metadata.get("llm_request_trace", {}), indent=2, ensure_ascii=False
-            ),
+            json.dumps(metadata.get("llm_request_trace", {}), indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
         (bundle_dir / "config-sanitized.yaml").write_text(
@@ -175,10 +167,5 @@ def _notify_mattermost(archive_path: Path, metadata: Dict[str, Any]) -> None:
     if not webhook:
         return
 
-    text = (
-        f"Диагностический bundle готов для trace `{metadata['trace_id']}`.\n"
-        f"Путь: `{target}`"
-    )
-    httpx.post(
-        webhook, json={"text": text}, timeout=httpx.Timeout(20.0)
-    ).raise_for_status()
+    text = f"Диагностический bundle готов для trace `{metadata['trace_id']}`.\n" f"Путь: `{target}`"
+    httpx.post(webhook, json={"text": text}, timeout=httpx.Timeout(20.0)).raise_for_status()

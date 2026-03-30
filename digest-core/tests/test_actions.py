@@ -48,9 +48,7 @@ class TestActionDetectionRussian:
     def test_russian_action_marker_nuzhno(self, extractor):
         """Test Russian 'нужно' action marker."""
         text = "Иван Петров, нужно согласовать документ до завтра."
-        actions = extractor.extract_mentions_actions(
-            text, "msg-002", "colleague@corp.com"
-        )
+        actions = extractor.extract_mentions_actions(text, "msg-002", "colleague@corp.com")
 
         assert len(actions) >= 1
         assert actions[0].confidence > 0.6  # Has deadline + mention
@@ -68,9 +66,7 @@ class TestActionDetectionRussian:
     def test_russian_proshu(self, extractor):
         """Test Russian 'прошу' action marker."""
         text = "Прошу вас, ivanov, утвердить бюджет до конца дня."
-        actions = extractor.extract_mentions_actions(
-            text, "msg-004", "finance@corp.com"
-        )
+        actions = extractor.extract_mentions_actions(text, "msg-004", "finance@corp.com")
 
         assert len(actions) >= 1
         assert actions[0].confidence > 0.7  # Has mention + action + deadline
@@ -82,9 +78,7 @@ class TestActionDetectionEnglish:
     def test_english_please_imperative(self, extractor):
         """Test 'please' imperative detection."""
         text = "Ivan, please review the PR by Friday."
-        actions = extractor.extract_mentions_actions(
-            text, "msg-005", "developer@corp.com"
-        )
+        actions = extractor.extract_mentions_actions(text, "msg-005", "developer@corp.com")
 
         assert len(actions) >= 1
         assert actions[0].type in ["action", "question"]
@@ -109,9 +103,7 @@ class TestActionDetectionEnglish:
     def test_english_need_to(self, extractor):
         """Test 'need to' action marker."""
         text = "We need Ivan to complete the analysis by EOD."
-        actions = extractor.extract_mentions_actions(
-            text, "msg-008", "manager@corp.com"
-        )
+        actions = extractor.extract_mentions_actions(text, "msg-008", "manager@corp.com")
 
         assert len(actions) >= 1
         assert actions[0].due is not None  # "EOD" detected
@@ -131,9 +123,7 @@ class TestMentionDetection:
     def test_mention_by_name(self, extractor):
         """Test mention by full name."""
         text = "Discussing this with Ivan Petrov would be helpful."
-        actions = extractor.extract_mentions_actions(
-            text, "msg-010", "colleague@corp.com"
-        )
+        actions = extractor.extract_mentions_actions(text, "msg-010", "colleague@corp.com")
 
         assert len(actions) >= 1
 
@@ -186,9 +176,7 @@ class TestDeadlineExtraction:
     def test_deadline_day_of_week(self, extractor):
         """Test deadline with day of week."""
         text = "Ivan Petrov, please review by Friday."
-        actions = extractor.extract_mentions_actions(
-            text, "msg-016", "reviewer@corp.com"
-        )
+        actions = extractor.extract_mentions_actions(text, "msg-016", "reviewer@corp.com")
 
         assert len(actions) >= 1
         assert actions[0].due is not None
@@ -213,9 +201,7 @@ class TestConfidenceScoring:
         """Test medium confidence with partial signals."""
         # Has: mention + question, no deadline
         text = "Ivan, what do you think about this approach?"
-        actions = extractor.extract_mentions_actions(
-            text, "msg-018", "colleague@corp.com"
-        )
+        actions = extractor.extract_mentions_actions(text, "msg-018", "colleague@corp.com")
 
         assert len(actions) >= 1
         assert 0.4 <= actions[0].confidence <= 0.8  # Medium confidence
@@ -260,9 +246,7 @@ class TestMultipleActions:
         2. Согласуйте бюджет до понедельника
         3. Отправьте результаты команде
         """
-        actions = extractor.extract_mentions_actions(
-            text, "msg-022", "manager@corp.com"
-        )
+        actions = extractor.extract_mentions_actions(text, "msg-022", "manager@corp.com")
 
         # Should extract multiple actions
         assert len(actions) >= 2
@@ -379,9 +363,7 @@ class TestGoldSetValidation:
         tn = 0  # True negatives
         fn = 0  # False negatives
 
-        confidence_threshold = (
-            0.5  # Actions with confidence >= 0.5 are considered positive
-        )
+        confidence_threshold = 0.5  # Actions with confidence >= 0.5 are considered positive
 
         for text, should_extract, expected_type, has_deadline in self.GOLD_SET:
             actions = extractor.extract_mentions_actions(
@@ -389,9 +371,7 @@ class TestGoldSetValidation:
             )
 
             # Filter actions by confidence threshold
-            high_conf_actions = [
-                a for a in actions if a.confidence >= confidence_threshold
-            ]
+            high_conf_actions = [a for a in actions if a.confidence >= confidence_threshold]
 
             if should_extract:
                 if len(high_conf_actions) > 0:
@@ -415,11 +395,7 @@ class TestGoldSetValidation:
         # Calculate metrics
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        f1 = (
-            2 * precision * recall / (precision + recall)
-            if (precision + recall) > 0
-            else 0
-        )
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
 
         print("\n=== Gold Set Validation ===")
         print(f"True Positives: {tp}")
@@ -447,12 +423,8 @@ class TestEdgeCases:
 
     def test_very_long_text(self, extractor):
         """Test with very long text."""
-        long_text = (
-            "Hello Ivan. " + ("Some filler text. " * 100) + "Please review by Friday."
-        )
-        actions = extractor.extract_mentions_actions(
-            long_text, "msg-long", "test@corp.com"
-        )
+        long_text = "Hello Ivan. " + ("Some filler text. " * 100) + "Please review by Friday."
+        actions = extractor.extract_mentions_actions(long_text, "msg-long", "test@corp.com")
 
         # Should still extract action
         assert len(actions) >= 1
@@ -467,9 +439,7 @@ class TestEdgeCases:
     def test_special_characters(self, extractor):
         """Test with special characters."""
         text = "Ivan!!! Пожалуйста, сделайте СРОЧНО до завтра!!!"
-        actions = extractor.extract_mentions_actions(
-            text, "msg-special", "urgent@corp.com"
-        )
+        actions = extractor.extract_mentions_actions(text, "msg-special", "urgent@corp.com")
 
         assert len(actions) >= 1
         assert actions[0].due is not None

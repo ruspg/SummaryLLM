@@ -322,9 +322,7 @@ class TestFallbackMechanisms:
         html = "<<<>>><invalid"
         plaintext_fallback = "This is the plain text version"
 
-        text, success = normalizer.html_to_text(
-            html, fallback_plaintext=plaintext_fallback
-        )
+        text, success = normalizer.html_to_text(html, fallback_plaintext=plaintext_fallback)
 
         # Should use fallback
         assert "plain text version" in text.lower()

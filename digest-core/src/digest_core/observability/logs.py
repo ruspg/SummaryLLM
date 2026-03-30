@@ -140,9 +140,7 @@ def get_logger(name: str = None) -> structlog.BoundLogger:
     return structlog.get_logger(name)
 
 
-def log_pipeline_stage(
-    stage: str, run_id: str = None, trace_id: str = None, **kwargs
-) -> None:
+def log_pipeline_stage(stage: str, run_id: str = None, trace_id: str = None, **kwargs) -> None:
     """Log a pipeline stage with context."""
     logger = get_logger()
     context = {"stage": stage}
@@ -170,9 +168,7 @@ def log_error_with_context(
     logger.error("Pipeline error", **context, exc_info=True, **kwargs)
 
 
-def log_metrics(
-    metrics: Dict[str, Any], run_id: str = None, trace_id: str = None
-) -> None:
+def log_metrics(metrics: Dict[str, Any], run_id: str = None, trace_id: str = None) -> None:
     """Log metrics data."""
     logger = get_logger()
     context = {}
@@ -314,9 +310,7 @@ def generate_trace_id() -> str:
     return str(uuid.uuid4())
 
 
-def get_contextual_logger(
-    run_id: str = None, trace_id: str = None
-) -> structlog.BoundLogger:
+def get_contextual_logger(run_id: str = None, trace_id: str = None) -> structlog.BoundLogger:
     """Get a logger with run_id and trace_id context."""
     logger = get_logger()
 
@@ -338,10 +332,7 @@ def log_configuration(
     # Redact sensitive configuration values
     redacted_config = {}
     for key, value in config_dict.items():
-        if any(
-            sensitive in key.lower()
-            for sensitive in ["password", "token", "secret", "key"]
-        ):
+        if any(sensitive in key.lower() for sensitive in ["password", "token", "secret", "key"]):
             redacted_config[key] = "[[REDACTED]]"
         else:
             redacted_config[key] = value

@@ -27,9 +27,7 @@ class TestBalancedSelection:
                 "to": ["user@example.com"],
                 "cc": [],
                 "subject": "Test",
-                "received_at": (
-                    datetime.now(timezone.utc) - timedelta(hours=1)
-                ).isoformat(),
+                "received_at": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
                 "importance": "Normal",
                 "is_flagged": False,
                 "has_attachments": False,
@@ -101,9 +99,7 @@ class TestBalancedSelection:
 
         # Check that we selected from multiple threads
         metrics = selector.get_metrics()
-        assert (
-            metrics["covered_threads"] >= 3
-        ), f"Only {metrics['covered_threads']} threads covered"
+        assert metrics["covered_threads"] >= 3, f"Only {metrics['covered_threads']} threads covered"
 
         print(f"✓ Noisy thread limited to {len(noisy_selected)} chunks")
         print(f"✓ Covered {metrics['covered_threads']} different threads")
@@ -185,9 +181,7 @@ class TestBalancedSelection:
         assert (
             len(deadline_selected) >= 4
         ), f"Only {len(deadline_selected)} deadline chunks selected"
-        assert (
-            len(tome_selected) >= 4
-        ), f"Only {len(tome_selected)} to-me chunks selected"
+        assert len(tome_selected) >= 4, f"Only {len(tome_selected)} to-me chunks selected"
 
     def test_action_thread_coverage(self):
         """Test that ≥90% of threads with action signals are covered."""
@@ -283,8 +277,7 @@ class TestBalancedSelection:
         print(f"✓ Total tokens: {total_tokens}")
 
         assert (
-            metrics["token_budget_used"]
-            <= selector.context_budget_config.max_total_tokens
+            metrics["token_budget_used"] <= selector.context_budget_config.max_total_tokens
         ), f"Budget exceeded: {metrics['token_budget_used']}"
         assert (
             total_tokens <= selector.context_budget_config.max_total_tokens
@@ -393,9 +386,7 @@ class TestBalancedSelection:
         print(f"✓ Total selected: {sum(metrics['selected_by_bucket'].values())}")
 
         # Verify bucket targets are met or approached (allowing some flexibility due to token budget)
-        assert (
-            metrics["selected_by_bucket"]["threads_top"] >= 8
-        ), "threads_top bucket under-filled"
+        assert metrics["selected_by_bucket"]["threads_top"] >= 8, "threads_top bucket under-filled"
         # Note: Some buckets may not fully fill due to token budget constraints and chunk competition
         assert (
             metrics["selected_by_bucket"].get("addressed_to_me", 0) >= 3

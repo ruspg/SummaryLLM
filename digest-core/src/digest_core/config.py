@@ -26,12 +26,8 @@ class TimeConfig(BaseModel):
         default="Europe/Moscow",
         description="Mailbox timezone for normalizing naive datetime",
     )
-    runner_tz: str = Field(
-        default="America/Sao_Paulo", description="Runner/job timezone"
-    )
-    fail_on_naive: bool = Field(
-        default=True, description="Fail if naive datetime is encountered"
-    )
+    runner_tz: str = Field(default="America/Sao_Paulo", description="Runner/job timezone")
+    fail_on_naive: bool = Field(default=True, description="Fail if naive datetime is encountered")
 
 
 class EWSConfig(BaseModel):
@@ -49,16 +45,12 @@ class EWSConfig(BaseModel):
         default="EWS_PASSWORD", description="Environment variable for password"
     )
     verify_ca: Optional[str] = Field(default=None, description="Path to CA certificate")
-    verify_ssl: bool = Field(
-        default=True, description="Enable SSL certificate verification"
-    )
+    verify_ssl: bool = Field(default=True, description="Enable SSL certificate verification")
     autodiscover: bool = Field(default=False, description="Enable autodiscover")
     folders: List[str] = Field(default=["Inbox"], description="Folders to process")
     lookback_hours: int = Field(default=24, description="Hours to look back")
     page_size: int = Field(default=100, description="Page size for pagination")
-    sync_state_path: str = Field(
-        default=".state/ews.syncstate", description="Sync state file path"
-    )
+    sync_state_path: str = Field(default=".state/ews.syncstate", description="Sync state file path")
     user_aliases: List[str] = Field(
         default_factory=list,
         description="User email aliases for AddressedToMe detection",
@@ -111,22 +103,14 @@ class LLMConfig(BaseModel):
     endpoint: str = Field(default="", description="LLM Gateway endpoint")
     model: str = Field(default="qwen35-397b-a17b", description="Model identifier")
     timeout_s: int = Field(default=120, description="Request timeout in seconds")
-    headers: Dict[str, str] = Field(
-        default_factory=dict, description="Additional headers"
-    )
+    headers: Dict[str, str] = Field(default_factory=dict, description="Additional headers")
     max_tokens_per_run: int = Field(default=30000, description="Max tokens per run")
-    cost_limit_per_run: float = Field(
-        default=5.0, description="Cost limit per run in USD"
-    )
-    rate_limit_rpm: int = Field(
-        default=15, description="Gateway rate limit in requests per minute"
-    )
+    cost_limit_per_run: float = Field(default=5.0, description="Cost limit per run in USD")
+    rate_limit_rpm: int = Field(default=15, description="Gateway rate limit in requests per minute")
     strict_json: bool = Field(
         default=True, description="Enforce strict JSON validation with Pydantic"
     )
-    max_retries: int = Field(
-        default=3, description="Maximum retry attempts for invalid JSON"
-    )
+    max_retries: int = Field(default=3, description="Maximum retry attempts for invalid JSON")
 
     def __init__(self, **kwargs):
         # Читаем значения из переменных окружения если они не заданы
@@ -163,12 +147,8 @@ class MattermostDeliverConfig(BaseModel):
     webhook_url_env: str = Field(
         default="MM_WEBHOOK_URL", description="Environment variable with webhook URL"
     )
-    max_message_length: int = Field(
-        default=16383, description="Mattermost max message size"
-    )
-    include_trace_footer: bool = Field(
-        default=True, description="Append trace footer to delivery"
-    )
+    max_message_length: int = Field(default=16383, description="Mattermost max message size")
+    include_trace_footer: bool = Field(default=True, description="Append trace footer to delivery")
 
     def get_webhook_url(self) -> str:
         """Return the Mattermost incoming webhook URL."""
@@ -187,51 +167,29 @@ class DeliverConfig(BaseModel):
 class SelectionBucketsConfig(BaseModel):
     """Configuration for balanced evidence selection buckets."""
 
-    threads_top: int = Field(
-        default=10, description="Minimum threads to cover (1 chunk each)"
-    )
-    addressed_to_me: int = Field(
-        default=8, description="Minimum chunks with AddressedToMe=true"
-    )
-    dates_deadlines: int = Field(
-        default=6, description="Minimum chunks with dates/deadlines"
-    )
-    critical_senders: int = Field(
-        default=4, description="Minimum chunks from sender_rank>=2"
-    )
+    threads_top: int = Field(default=10, description="Minimum threads to cover (1 chunk each)")
+    addressed_to_me: int = Field(default=8, description="Minimum chunks with AddressedToMe=true")
+    dates_deadlines: int = Field(default=6, description="Minimum chunks with dates/deadlines")
+    critical_senders: int = Field(default=4, description="Minimum chunks from sender_rank>=2")
     per_thread_max: int = Field(default=3, description="Maximum chunks per thread")
-    max_total_chunks: int = Field(
-        default=20, description="Maximum total chunks to select"
-    )
+    max_total_chunks: int = Field(default=20, description="Maximum total chunks to select")
 
 
 class SelectionWeightsConfig(BaseModel):
     """Feature weights for evidence chunk scoring."""
 
-    recency: float = Field(
-        default=2.0, description="Weight for message recency (hours)"
-    )
-    addressed_to_me: float = Field(
-        default=3.0, description="Weight for AddressedToMe flag"
-    )
+    recency: float = Field(default=2.0, description="Weight for message recency (hours)")
+    addressed_to_me: float = Field(default=3.0, description="Weight for AddressedToMe flag")
     action_verbs: float = Field(default=1.5, description="Weight per action verb found")
     question_mark: float = Field(default=1.0, description="Weight for questions")
-    dates_found: float = Field(
-        default=1.5, description="Weight per date/deadline found"
-    )
-    importance_high: float = Field(
-        default=2.0, description="Weight for High importance"
-    )
+    dates_found: float = Field(default=1.5, description="Weight per date/deadline found")
+    importance_high: float = Field(default=2.0, description="Weight for High importance")
     is_flagged: float = Field(default=1.5, description="Weight for flagged messages")
     has_doc_attachments: float = Field(
         default=1.0, description="Weight for doc/xlsx/pdf attachments"
     )
-    sender_rank: float = Field(
-        default=1.0, description="Weight multiplier per sender rank level"
-    )
-    thread_activity: float = Field(
-        default=0.5, description="Weight for thread activity"
-    )
+    sender_rank: float = Field(default=1.0, description="Weight multiplier per sender rank level")
+    thread_activity: float = Field(default=0.5, description="Weight for thread activity")
     negative_prior: float = Field(
         default=-2.0, description="Penalty for noreply/unsubscribe patterns"
     )
@@ -240,9 +198,7 @@ class SelectionWeightsConfig(BaseModel):
 class ContextBudgetConfig(BaseModel):
     """Configuration for context token budget."""
 
-    max_total_tokens: int = Field(
-        default=7000, description="Maximum total tokens for LLM input"
-    )
+    max_total_tokens: int = Field(default=7000, description="Maximum total tokens for LLM input")
     per_thread_max: int = Field(default=3, description="Maximum chunks per thread")
 
 
@@ -251,26 +207,20 @@ class ChunkingConfig(BaseModel):
 
     long_email_tokens: int = Field(default=1000, description="Threshold for long email")
     max_chunks_if_long: int = Field(default=3, description="Max chunks for long emails")
-    max_chunks_default: int = Field(
-        default=12, description="Default max chunks per message"
-    )
+    max_chunks_default: int = Field(default=12, description="Default max chunks per message")
     adaptive_high_load_emails: int = Field(
         default=200, description="Email count threshold for high load"
     )
     adaptive_high_load_threads: int = Field(
         default=60, description="Thread count threshold for high load"
     )
-    adaptive_multiplier: float = Field(
-        default=0.75, description="Multiplier for high load"
-    )
+    adaptive_multiplier: float = Field(default=0.75, description="Multiplier for high load")
 
 
 class ShrinkConfig(BaseModel):
     """Configuration for auto-shrink behavior."""
 
-    enable_auto_shrink: bool = Field(
-        default=True, description="Enable auto-shrink on overflow"
-    )
+    enable_auto_shrink: bool = Field(default=True, description="Enable auto-shrink on overflow")
     preserve_min_quotas: bool = Field(
         default=True, description="Preserve minimum bucket quotas during shrink"
     )
@@ -286,9 +236,7 @@ class EmailCleanerConfig(BaseModel):
     max_top_quote_paragraphs: int = Field(
         default=2, description="Max paragraphs to keep from top quote"
     )
-    max_top_quote_lines: int = Field(
-        default=10, description="Max lines to keep from top quote"
-    )
+    max_top_quote_lines: int = Field(default=10, description="Max lines to keep from top quote")
     max_quote_removal_length: int = Field(
         default=10000,
         description="Max chars to remove in single quote block (safety limit)",
@@ -328,9 +276,7 @@ class HierarchicalConfig(BaseModel):
     """Configuration for hierarchical digest mode."""
 
     enable: bool = Field(default=True, description="Enable hierarchical mode")
-    auto_enable: bool = Field(
-        default=True, description="Auto-enable based on thresholds"
-    )
+    auto_enable: bool = Field(default=True, description="Auto-enable based on thresholds")
     enable_auto: bool = Field(
         default=True, description="Enable automatic hierarchical mode activation"
     )
@@ -343,12 +289,8 @@ class HierarchicalConfig(BaseModel):
     min_threads_to_summarize: int = Field(
         default=6, description="Minimum threads required to use hierarchical mode"
     )
-    min_threads: int = Field(
-        default=60, description="Min threads to auto-activate (was 30)"
-    )
-    min_emails: int = Field(
-        default=300, description="Min emails to auto-activate (was 150)"
-    )
+    min_threads: int = Field(default=60, description="Min threads to auto-activate (was 30)")
+    min_emails: int = Field(default=300, description="Min emails to auto-activate (was 150)")
 
     per_thread_max_chunks_in: int = Field(
         default=8, description="Max chunks per thread for summarization"
@@ -357,12 +299,8 @@ class HierarchicalConfig(BaseModel):
         default=12,
         description="Max chunks in exceptional cases (mentions, last update)",
     )
-    summary_max_tokens: int = Field(
-        default=90, description="Max tokens for thread summary"
-    )
-    parallel_pool: int = Field(
-        default=8, description="Max parallel thread summarization workers"
-    )
+    summary_max_tokens: int = Field(default=90, description="Max tokens for thread summary")
+    parallel_pool: int = Field(default=8, description="Max parallel thread summarization workers")
     timeout_sec: int = Field(default=20, description="Timeout per thread summarization")
     degrade_on_timeout: str = Field(
         default="best_2_chunks", description="Degradation strategy on timeout"
@@ -377,9 +315,7 @@ class HierarchicalConfig(BaseModel):
     )
 
     # Merge policy
-    merge_max_citations: int = Field(
-        default=5, description="Max citations in merged summary (3-5)"
-    )
+    merge_max_citations: int = Field(default=5, description="Max citations in merged summary (3-5)")
     merge_include_title: bool = Field(
         default=True, description="Include brief title in merged summary"
     )
@@ -395,9 +331,7 @@ class HierarchicalConfig(BaseModel):
     max_latency_increase_pct: int = Field(
         default=50, description="Max acceptable latency increase %"
     )
-    target_latency_increase_pct: int = Field(
-        default=30, description="Target latency increase %"
-    )
+    target_latency_increase_pct: int = Field(default=30, description="Target latency increase %")
     max_cost_increase_per_email_pct: int = Field(
         default=40, description="Max acceptable cost increase per email %"
     )
@@ -480,18 +414,14 @@ class RankerConfig(BaseModel):
         description="List of important sender email addresses or domain patterns (e.g., 'ceo@', 'example.com')",
     )
 
-    log_positions: bool = Field(
-        default=True, description="Log item positions for A/B analysis"
-    )
+    log_positions: bool = Field(default=True, description="Log item positions for A/B analysis")
 
 
 class DegradeConfig(BaseModel):
     """Configuration for LLM failure degradation."""
 
     enable: bool = Field(default=True, description="Enable degradation on LLM failures")
-    mode: str = Field(
-        default="extractive", description="Degradation mode: extractive | empty"
-    )
+    mode: str = Field(default="extractive", description="Degradation mode: extractive | empty")
 
 
 class Config(BaseSettings):
@@ -503,12 +433,8 @@ class Config(BaseSettings):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     deliver: DeliverConfig = Field(default_factory=DeliverConfig)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
-    selection_buckets: SelectionBucketsConfig = Field(
-        default_factory=SelectionBucketsConfig
-    )
-    selection_weights: SelectionWeightsConfig = Field(
-        default_factory=SelectionWeightsConfig
-    )
+    selection_buckets: SelectionBucketsConfig = Field(default_factory=SelectionBucketsConfig)
+    selection_weights: SelectionWeightsConfig = Field(default_factory=SelectionWeightsConfig)
     context_budget: ContextBudgetConfig = Field(default_factory=ContextBudgetConfig)
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     shrink: ShrinkConfig = Field(default_factory=ShrinkConfig)
@@ -608,13 +534,9 @@ class Config(BaseSettings):
             )
         if "deliver" in yaml_config:
             mattermost_config = yaml_config["deliver"].get("mattermost", {})
-            self._merge_model(
-                self.deliver.mattermost, mattermost_config, env_prefix="MM"
-            )
+            self._merge_model(self.deliver.mattermost, mattermost_config, env_prefix="MM")
         if "observability" in yaml_config:
-            self._merge_model(
-                self.observability, yaml_config["observability"], env_prefix="OBS"
-            )
+            self._merge_model(self.observability, yaml_config["observability"], env_prefix="OBS")
         if "selection_buckets" in yaml_config:
             self._merge_model(
                 self.selection_buckets,
@@ -634,9 +556,7 @@ class Config(BaseSettings):
                 env_prefix="CTX_BUDGET",
             )
         if "chunking" in yaml_config:
-            self._merge_model(
-                self.chunking, yaml_config["chunking"], env_prefix="CHUNKING"
-            )
+            self._merge_model(self.chunking, yaml_config["chunking"], env_prefix="CHUNKING")
         if "shrink" in yaml_config:
             self._merge_model(self.shrink, yaml_config["shrink"], env_prefix="SHRINK")
         if "hierarchical" in yaml_config:
@@ -656,9 +576,7 @@ class Config(BaseSettings):
         if "ranker" in yaml_config:
             self._merge_model(self.ranker, yaml_config["ranker"], env_prefix="RANKER")
         if "degrade" in yaml_config:
-            self._merge_model(
-                self.degrade, yaml_config["degrade"], env_prefix="DEGRADE"
-            )
+            self._merge_model(self.degrade, yaml_config["degrade"], env_prefix="DEGRADE")
 
     def _merge_model(
         self,

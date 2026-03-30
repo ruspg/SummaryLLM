@@ -63,9 +63,7 @@ class ThreadBuilder:
             "duplicates_found": 0,
         }
 
-    def build_threads(
-        self, messages: List[NormalizedMessage]
-    ) -> List[ConversationThread]:
+    def build_threads(self, messages: List[NormalizedMessage]) -> List[ConversationThread]:
         """Build conversation threads from normalized messages."""
         logger.info("Building conversation threads", message_count=len(messages))
 
@@ -96,17 +94,13 @@ class ThreadBuilder:
                 if thread:
                     threads.append(thread)
             except Exception as e:
-                logger.warning(
-                    "Failed to build thread", thread_id=thread_id, error=str(e)
-                )
+                logger.warning("Failed to build thread", thread_id=thread_id, error=str(e))
                 continue
 
         # Sort threads by latest message time (most recent first)
         threads.sort(key=lambda t: t.latest_message_time, reverse=True)
 
-        logger.info(
-            "Thread building completed", threads_created=len(threads), **self.stats
-        )
+        logger.info("Thread building completed", threads_created=len(threads), **self.stats)
 
         return threads
 
@@ -416,9 +410,7 @@ class ThreadBuilder:
 
         cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
 
-        recent_threads = [
-            thread for thread in threads if thread.latest_message_time >= cutoff_time
-        ]
+        recent_threads = [thread for thread in threads if thread.latest_message_time >= cutoff_time]
 
         logger.info(
             "Filtered recent threads",
@@ -429,9 +421,7 @@ class ThreadBuilder:
 
         return recent_threads
 
-    def prioritize_threads(
-        self, threads: List[ConversationThread]
-    ) -> List[ConversationThread]:
+    def prioritize_threads(self, threads: List[ConversationThread]) -> List[ConversationThread]:
         """Prioritize threads based on relevance heuristics."""
 
         def thread_priority(thread: ConversationThread) -> float:
@@ -476,9 +466,7 @@ class ThreadBuilder:
         """Get threading statistics."""
         return self.stats.copy()
 
-    def calculate_redundancy_index(
-        self, original_count: int, final_count: int
-    ) -> float:
+    def calculate_redundancy_index(self, original_count: int, final_count: int) -> float:
         """
         Calculate redundancy index (how much duplication was reduced).
 

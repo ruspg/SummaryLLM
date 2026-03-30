@@ -71,9 +71,7 @@ class MarkdownAssembler:
             else digest_data.sections
         )
         total_items = sum(
-            len(
-                section.get("items", []) if isinstance(section, dict) else section.items
-            )
+            len(section.get("items", []) if isinstance(section, dict) else section.items)
             for section in sections
         )
         if total_items == 0:
@@ -83,12 +81,8 @@ class MarkdownAssembler:
         # Sections
         for section in sections:
             # Handle both object and dict formats
-            items = (
-                section.get("items", []) if isinstance(section, dict) else section.items
-            )
-            title = (
-                section.get("title", "") if isinstance(section, dict) else section.title
-            )
+            items = section.get("items", []) if isinstance(section, dict) else section.items
+            title = section.get("title", "") if isinstance(section, dict) else section.title
 
             if not items:
                 continue
@@ -133,9 +127,7 @@ class MarkdownAssembler:
                         f'**Источник:** {source_type}, тема "{item_email_subject}", evidence {item_evidence_id}'
                     )
                 else:
-                    lines.append(
-                        f"**Источник:** {source_type}, evidence {item_evidence_id}"
-                    )
+                    lines.append(f"**Источник:** {source_type}, evidence {item_evidence_id}")
 
                 lines.append("")
 
@@ -161,9 +153,7 @@ class MarkdownAssembler:
             lines.append("## Статистика")
             lines.append("")
             percent = (
-                int((emails_with_actions / total_processed) * 100)
-                if total_processed > 0
-                else 0
+                int((emails_with_actions / total_processed) * 100) if total_processed > 0 else 0
             )
             lines.append(
                 f"Обработано {total_processed} писем, {emails_with_actions} ({percent}%) содержали действия"
@@ -176,14 +166,10 @@ class MarkdownAssembler:
 
         evidence_ids = set()
         for section in sections:
-            items = (
-                section.get("items", []) if isinstance(section, dict) else section.items
-            )
+            items = section.get("items", []) if isinstance(section, dict) else section.items
             for item in items:
                 evidence_id = (
-                    item.get("evidence_id", "")
-                    if isinstance(item, dict)
-                    else item.evidence_id
+                    item.get("evidence_id", "") if isinstance(item, dict) else item.evidence_id
                 )
                 evidence_ids.add(evidence_id)
 
@@ -249,9 +235,7 @@ class MarkdownAssembler:
             else digest_data.sections
         )
         total_items = sum(
-            len(
-                section.get("items", []) if isinstance(section, dict) else section.items
-            )
+            len(section.get("items", []) if isinstance(section, dict) else section.items)
             for section in sections
         )
 
@@ -261,12 +245,8 @@ class MarkdownAssembler:
         summary_parts = [f"Найдено {total_items} действий:"]
 
         for section in sections:
-            items = (
-                section.get("items", []) if isinstance(section, dict) else section.items
-            )
-            title = (
-                section.get("title", "") if isinstance(section, dict) else section.title
-            )
+            items = section.get("items", []) if isinstance(section, dict) else section.items
+            title = section.get("title", "") if isinstance(section, dict) else section.title
             if items:
                 summary_parts.append(f"- {title}: {len(items)}")
 
@@ -286,9 +266,7 @@ class MarkdownAssembler:
                 return False
 
             # Check for evidence references
-            evidence_refs = [
-                line for line in lines if "Источник:" in line and "evidence" in line
-            ]
+            evidence_refs = [line for line in lines if "Источник:" in line and "evidence" in line]
             if not evidence_refs:
                 logger.warning("No evidence references found in markdown")
                 return False
@@ -380,9 +358,7 @@ class MarkdownAssembler:
                 lines.append(
                     "Данный дайджест создан в резервном режиме (extractive fallback) из-за ошибки парсинга JSON от LLM."
                 )
-                lines.append(
-                    "Информация может быть неполной или менее точной, чем обычно."
-                )
+                lines.append("Информация может быть неполной или менее точной, чем обычно.")
                 lines.append("---")
                 lines.append("")
             elif partial_reason == "llm_processing_failed":
@@ -392,21 +368,15 @@ class MarkdownAssembler:
                 lines.append(
                     "Данный дайджест создан в резервном режиме (extractive fallback) из-за сбоя LLM."
                 )
-                lines.append(
-                    "Информация может быть неполной или менее точной, чем обычно."
-                )
+                lines.append("Информация может быть неполной или менее точной, чем обычно.")
                 lines.append("---")
                 lines.append("")
             else:
                 lines.append("---")
                 lines.append("⚠️ **ЧАСТИЧНЫЙ ОТЧЁТ**")
                 lines.append("")
-                lines.append(
-                    "Данный дайджест создан в резервном режиме (extractive fallback)."
-                )
-                lines.append(
-                    "Информация может быть неполной или менее точной, чем обычно."
-                )
+                lines.append("Данный дайджест создан в резервном режиме (extractive fallback).")
+                lines.append("Информация может быть неполной или менее точной, чем обычно.")
                 lines.append("---")
                 lines.append("")
 
@@ -435,9 +405,7 @@ class MarkdownAssembler:
                 lines.append(f"### {i}. {action.title}")
                 lines.append(f"**Описание:** {action.description}")
                 if action.due_date:
-                    due_label = (
-                        f" ({action.due_date_label})" if action.due_date_label else ""
-                    )
+                    due_label = f" ({action.due_date_label})" if action.due_date_label else ""
                     lines.append(f"**Срок:** {action.due_date}{due_label}")
                 if action.due_date_normalized:
                     lines.append(f"**Дата (ISO):** {action.due_date_normalized}")
@@ -469,9 +437,7 @@ class MarkdownAssembler:
                 lines.append(f"### {i}. {action.title}")
                 lines.append(f"**Описание:** {action.description}")
                 if action.due_date:
-                    due_label = (
-                        f" ({action.due_date_label})" if action.due_date_label else ""
-                    )
+                    due_label = f" ({action.due_date_label})" if action.due_date_label else ""
                     lines.append(f"**Срок:** {action.due_date}{due_label}")
                 lines.append(f"**Уверенность:** {action.confidence}")
                 # Render actors or owners (V2 vs V3)
@@ -568,9 +534,7 @@ class MarkdownAssembler:
             lines.append("## Статистика")
             lines.append("")
             percent = (
-                int((emails_with_actions / total_processed) * 100)
-                if total_processed > 0
-                else 0
+                int((emails_with_actions / total_processed) * 100) if total_processed > 0 else 0
             )
             lines.append(
                 f"Обработано {total_processed} писем, {emails_with_actions} ({percent}%) содержали действия"

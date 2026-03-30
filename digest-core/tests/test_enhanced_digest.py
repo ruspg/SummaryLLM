@@ -116,9 +116,7 @@ class TestDateNormalization:
     def test_normalize_date_today(self):
         """Test date normalization for today."""
         base_dt = datetime(2024, 12, 14, 10, 0, 0, tzinfo=timezone.utc)
-        result = normalize_date_to_tz(
-            "2024-12-14T12:00:00", base_dt, "America/Sao_Paulo"
-        )
+        result = normalize_date_to_tz("2024-12-14T12:00:00", base_dt, "America/Sao_Paulo")
 
         assert result["label"] == "today"
         assert result["normalized"] is not None
@@ -126,18 +124,14 @@ class TestDateNormalization:
     def test_normalize_date_tomorrow(self):
         """Test date normalization for tomorrow."""
         base_dt = datetime(2024, 12, 14, 10, 0, 0, tzinfo=timezone.utc)
-        result = normalize_date_to_tz(
-            "2024-12-15T12:00:00", base_dt, "America/Sao_Paulo"
-        )
+        result = normalize_date_to_tz("2024-12-15T12:00:00", base_dt, "America/Sao_Paulo")
 
         assert result["label"] == "tomorrow"
 
     def test_normalize_date_future(self):
         """Test date normalization for future date."""
         base_dt = datetime(2024, 12, 14, 10, 0, 0, tzinfo=timezone.utc)
-        result = normalize_date_to_tz(
-            "2024-12-20T12:00:00", base_dt, "America/Sao_Paulo"
-        )
+        result = normalize_date_to_tz("2024-12-20T12:00:00", base_dt, "America/Sao_Paulo")
 
         assert result["label"] is None
         assert result["normalized"] is not None

@@ -93,21 +93,15 @@ def sample_evidence():
 def test_scoring_positive_signals(selector, sample_threads, sample_evidence):
     """Test scoring with positive signals."""
     # Test urgent keywords
-    score = selector._calculate_positive_signals(
-        "URGENT: Server Down", "admin@company.com"
-    )
+    score = selector._calculate_positive_signals("URGENT: Server Down", "admin@company.com")
     assert score > 0
 
     # Test meeting keywords
-    score = selector._calculate_positive_signals(
-        "Meeting: Q4 Review", "manager@company.com"
-    )
+    score = selector._calculate_positive_signals("Meeting: Q4 Review", "manager@company.com")
     assert score > 0
 
     # Test action keywords
-    score = selector._calculate_positive_signals(
-        "Please review and approve", "user@company.com"
-    )
+    score = selector._calculate_positive_signals("Please review and approve", "user@company.com")
     assert score > 0
 
 
@@ -135,15 +129,11 @@ def test_service_mail_filtering(selector, sample_threads, sample_evidence):
     assert is_service
 
     # Test DSN filtering
-    is_service = selector._is_service_email(
-        "Delivery Status Notification", "system@company.com"
-    )
+    is_service = selector._is_service_email("Delivery Status Notification", "system@company.com")
     assert is_service
 
     # Test regular email
-    is_service = selector._is_service_email(
-        "Regular business email", "user@company.com"
-    )
+    is_service = selector._is_service_email("Regular business email", "user@company.com")
     assert not is_service
 
 
@@ -186,10 +176,7 @@ def test_insufficient_tokens(selector, sample_threads, sample_evidence):
     # Should still return something, even if the smallest chunk itself exceeds the budget.
     assert len(selected) > 0
     total_tokens = sum(chunk.token_count for chunk in selected)
-    assert (
-        total_tokens <= max_tokens
-        or min(chunk.token_count for chunk in selected) > max_tokens
-    )
+    assert total_tokens <= max_tokens or min(chunk.token_count for chunk in selected) > max_tokens
 
 
 def test_sender_weighting(selector, sample_threads, sample_evidence):

@@ -110,9 +110,7 @@ def test_tokens_from_headers(monkeypatch):
 
     # Mock response with usage in headers
     mock_response = Mock()
-    mock_response.json.return_value = {
-        "choices": [{"message": {"content": '{"sections": []}'}}]
-    }
+    mock_response.json.return_value = {"choices": [{"message": {"content": '{"sections": []}'}}]}
     mock_response.headers = {"x-llm-tokens-in": "200", "x-llm-tokens-out": "75"}
     mock_response.raise_for_status = Mock()
 

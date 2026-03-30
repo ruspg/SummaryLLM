@@ -145,9 +145,7 @@ def test_message_normalization(ingester):
 
     assert normalized.msg_id == "test-message-id"
     assert normalized.conversation_id == "test-conversation-id"
-    assert normalized.datetime_received == datetime(
-        2024, 1, 15, 10, 30, tzinfo=timezone.utc
-    )
+    assert normalized.datetime_received == datetime(2024, 1, 15, 10, 30, tzinfo=timezone.utc)
     assert normalized.sender_email == "sender@company.com"
     assert normalized.from_email == "sender@company.com"
     assert normalized.from_name == "Sender Name"

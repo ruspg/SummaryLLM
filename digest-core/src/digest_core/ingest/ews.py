@@ -192,9 +192,7 @@ class EWSIngest:
 
         # Create credentials with NTLM username (login@domain)
         ntlm_username = self.config.get_ntlm_username()
-        credentials = Credentials(
-            username=ntlm_username, password=self.config.get_password()
-        )
+        credentials = Credentials(username=ntlm_username, password=self.config.get_password())
 
         logger.debug("Using NTLM authentication", username=ntlm_username)
 
@@ -313,15 +311,10 @@ class EWSIngest:
             requests.Session.request = cls._original_request
             logger.debug("requests SSL verification restored")
         else:
-            logger.warning(
-                "Cannot restore requests SSL verification: original method not saved"
-            )
+            logger.warning("Cannot restore requests SSL verification: original method not saved")
 
         # Restore httpx.Client.__init__ if it was patched
-        if (
-            hasattr(cls, "_original_httpx_init")
-            and cls._original_httpx_init is not None
-        ):
+        if hasattr(cls, "_original_httpx_init") and cls._original_httpx_init is not None:
             try:
                 import httpx
 
@@ -341,9 +334,7 @@ class EWSIngest:
 
         if time_config.window == "calendar_day":
             # Calendar day: 00:00:00 to 23:59:59 in user timezone
-            start_date = datetime.strptime(digest_date, "%Y-%m-%d").replace(
-                tzinfo=user_tz
-            )
+            start_date = datetime.strptime(digest_date, "%Y-%m-%d").replace(tzinfo=user_tz)
             end_date = start_date.replace(hour=23, minute=59, second=59)
 
             # Convert to UTC using our utilities
@@ -387,9 +378,7 @@ class EWSIngest:
                 end_ews = EWSDateTime.from_datetime(end_date)
 
             # Create filter for last 24 hours
-            filter_query = Q(
-                datetime_received__gte=start_ews, datetime_received__lte=end_ews
-            )
+            filter_query = Q(datetime_received__gte=start_ews, datetime_received__lte=end_ews)
 
             # Fetch messages with pagination
             messages = []
@@ -397,9 +386,7 @@ class EWSIngest:
 
             while True:
                 # Use folder.filter() with pagination
-                page = folder.filter(filter_query)[
-                    offset : offset + self.config.page_size
-                ]
+                page = folder.filter(filter_query)[offset : offset + self.config.page_size]
                 page_list = list(page)
 
                 if not page_list:
@@ -408,9 +395,7 @@ class EWSIngest:
                 messages.extend(page_list)
                 offset += self.config.page_size
 
-                logger.debug(
-                    "Fetched page", page_size=len(page_list), total=len(messages)
-                )
+                logger.debug("Fetched page", page_size=len(page_list), total=len(messages))
 
                 # Safety check to prevent infinite loops
                 if len(page_list) < self.config.page_size:
@@ -456,11 +441,7 @@ class EWSIngest:
 
         # Get sender email address
         sender_email = ""
-        if (
-            msg.sender
-            and hasattr(msg.sender, "email_address")
-            and msg.sender.email_address
-        ):
+        if msg.sender and hasattr(msg.sender, "email_address") and msg.sender.email_address:
             sender_email = msg.sender.email_address.lower()
 
         # Get recipients
@@ -565,9 +546,7 @@ class EWSIngest:
             received_at=datetime_received,
         )
 
-    def fetch_messages(
-        self, digest_date: str, time_config: TimeConfig
-    ) -> List[NormalizedMessage]:
+    def fetch_messages(self, digest_date: str, time_config: TimeConfig) -> List[NormalizedMessage]:
         """Fetch and normalize messages for the given date."""
         logger.info("Starting EWS message fetch", digest_date=digest_date)
 
@@ -598,9 +577,7 @@ class EWSIngest:
                     error=str(e),
                 )
         # Fetch with retry over the computed window
-        raw_messages = self._fetch_messages_with_retry(
-            account.inbox, start_date, end_date
-        )
+        raw_messages = self._fetch_messages_with_retry(account.inbox, start_date, end_date)
 
         logger.info("Raw messages fetched", count=len(raw_messages))
 
@@ -641,9 +618,7 @@ class EWSIngest:
             logger.info("SyncState loaded", path=str(sync_state_path))
             return sync_state
         except Exception as e:
-            logger.warning(
-                "Failed to load SyncState", path=str(sync_state_path), error=str(e)
-            )
+            logger.warning("Failed to load SyncState", path=str(sync_state_path), error=str(e))
             return None
 
     # Note: Real EWS SyncFolderItems can be added later; MVP uses timestamp watermark
@@ -663,6 +638,4 @@ class EWSIngest:
                 timestamp=last_processed.isoformat(),
             )
         except Exception as e:
-            logger.warning(
-                "Failed to update SyncState", path=str(sync_state_path), error=str(e)
-            )
+            logger.warning("Failed to update SyncState", path=str(sync_state_path), error=str(e))

@@ -179,9 +179,5 @@ def test_metrics_labels():
     values = metrics.get_metric_values()
     metric_key = next(key for key in values if key.startswith("llm_request_context"))
     samples = values[metric_key]["samples"]
-    assert any(
-        sample["labels"].get("model") == "qwen35-397b-a17b" for sample in samples
-    )
-    assert any(
-        sample["labels"].get("operation") == "extract_actions" for sample in samples
-    )
+    assert any(sample["labels"].get("model") == "qwen35-397b-a17b" for sample in samples)
+    assert any(sample["labels"].get("operation") == "extract_actions" for sample in samples)

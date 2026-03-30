@@ -155,9 +155,7 @@ def test_token_budget_respect(splitter, sample_messages):
 
     # Each chunk should respect the per-chunk budget
     for chunk in chunks:
-        assert (
-            chunk.token_count <= splitter.max_tokens_per_chunk * 1.1
-        )  # Allow 10% margin
+        assert chunk.token_count <= splitter.max_tokens_per_chunk * 1.1  # Allow 10% margin
 
 
 def test_empty_content(splitter):

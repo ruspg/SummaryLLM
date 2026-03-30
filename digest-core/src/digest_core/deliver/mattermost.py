@@ -13,8 +13,7 @@ from digest_core.llm.schemas import Digest
 logger = structlog.get_logger()
 
 DEFAULT_PING_TEXT = (
-    "ActionPulse: проверка incoming webhook (mm-ping). "
-    'Свой текст: `mm-ping --message "..."`.'
+    "ActionPulse: проверка incoming webhook (mm-ping). " 'Свой текст: `mm-ping --message "..."`.'
 )
 
 
@@ -47,9 +46,7 @@ class MattermostDeliverer:
     def deliver_digest(self, digest: Digest) -> dict:
         """Format and send the digest to Mattermost."""
         webhook_url = self.config.get_webhook_url()
-        parts = self._split_message(
-            self._format_digest(digest), self.config.max_message_length
-        )
+        parts = self._split_message(self._format_digest(digest), self.config.max_message_length)
 
         with httpx.Client(timeout=httpx.Timeout(20.0)) as client:
             for index, part in enumerate(parts, start=1):
@@ -75,23 +72,17 @@ class MattermostDeliverer:
             section_lines = [f"**{section.title}**"]
             for index, item in enumerate(section.items, start=1):
                 due_part = f" | срок: {item.due}" if item.due else ""
-                confidence_part = (
-                    f" | уверенность: {self._confidence_label(item.confidence)}"
-                )
+                confidence_part = f" | уверенность: {self._confidence_label(item.confidence)}"
                 prefix = (
                     "-"
                     if section.title == "К сведению" or section.title == "Статус"
                     else f"{index}."
                 )
-                section_lines.append(
-                    f"{prefix} {item.title}{due_part}{confidence_part}"
-                )
+                section_lines.append(f"{prefix} {item.title}{due_part}{confidence_part}")
             blocks.append("\n".join(section_lines))
 
         if self.config.include_trace_footer:
-            blocks.append(
-                f"_trace: {digest.trace_id} | items: {self._count_items(digest)}_"
-            )
+            blocks.append(f"_trace: {digest.trace_id} | items: {self._count_items(digest)}_")
 
         return "\n\n".join(blocks)
 

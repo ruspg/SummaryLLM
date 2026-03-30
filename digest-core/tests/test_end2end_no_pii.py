@@ -157,9 +157,7 @@ class TestEndToEndNoPII:
 
         with patch.object(LLMGateway, "_make_request_with_retry") as mock_request:
             # First attempt returns invalid JSON
-            mock_request.side_effect = ValueError(
-                "Invalid JSON from LLM: Expecting value"
-            )
+            mock_request.side_effect = ValueError("Invalid JSON from LLM: Expecting value")
 
             gateway = LLMGateway(self.llm_config, enable_degrade=True, metrics=None)
 
@@ -207,9 +205,7 @@ class TestEndToEndNoPII:
 
                 # Verify partial marker in markdown
                 md_content = md_path.read_text(encoding="utf-8")
-                assert (
-                    "ЧАСТИЧНЫЙ ОТЧЁТ" in md_content or "резервном режиме" in md_content
-                )
+                assert "ЧАСТИЧНЫЙ ОТЧЁТ" in md_content or "резервном режиме" in md_content
 
     def test_llm_returns_phone_email_no_sanitization(self):
         """Test: LLM returns phone/email in text → pipeline OK (no sanitizer)."""

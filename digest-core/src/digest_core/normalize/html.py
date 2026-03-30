@@ -104,9 +104,7 @@ class HTMLNormalizer:
             # Step 8: Normalize unicode characters
             text = self._normalize_unicode(text)
 
-            if fallback_plaintext and self._should_use_plaintext_fallback(
-                html_content, text
-            ):
+            if fallback_plaintext and self._should_use_plaintext_fallback(html_content, text):
                 logger.info("Using text/plain fallback after low-quality HTML parse")
                 if self.metrics:
                     self.metrics.record_html_parse_error("fallback_used")
@@ -116,9 +114,7 @@ class HTMLNormalizer:
             return text, True
 
         except Exception as e:
-            logger.warning(
-                "HTML parsing failed", error=str(e), error_type=type(e).__name__
-            )
+            logger.warning("HTML parsing failed", error=str(e), error_type=type(e).__name__)
 
             if self.metrics:
                 self.metrics.record_html_parse_error("bs4_error")
@@ -139,9 +135,7 @@ class HTMLNormalizer:
             text = self._normalize_unicode(text)
             return text, False
 
-    def _should_use_plaintext_fallback(
-        self, html_content: str, parsed_text: str
-    ) -> bool:
+    def _should_use_plaintext_fallback(self, html_content: str, parsed_text: str) -> bool:
         """Detect cases where HTML parsing returned the original garbage unchanged."""
         normalized_source = self._normalize_unicode(
             self._clean_whitespace(html.unescape(html_content))
@@ -152,9 +146,7 @@ class HTMLNormalizer:
             return True
 
         # Case 1: BS4 passed the original garbage through unchanged
-        if normalized_text == normalized_source and (
-            "<" in html_content or ">" in html_content
-        ):
+        if normalized_text == normalized_source and ("<" in html_content or ">" in html_content):
             return True
 
         # Case 2: No real text content outside tags (including unclosed/partial tags)
@@ -283,9 +275,7 @@ class HTMLNormalizer:
                     cells = []
                     for td in tr.find_all(["td", "th"]):
                         cells.append(td.get_text().strip())
-                    if (
-                        cells and cells != headers
-                    ):  # Skip header row if already processed
+                    if cells and cells != headers:  # Skip header row if already processed
                         rows.append(cells)
 
                 # Build markdown table
@@ -296,13 +286,9 @@ class HTMLNormalizer:
                     if headers:
                         # Limit column width to 30 chars
                         headers_truncated = [h[:30] for h in headers]
+                        markdown_lines.append("| " + " | ".join(headers_truncated) + " |")
                         markdown_lines.append(
-                            "| " + " | ".join(headers_truncated) + " |"
-                        )
-                        markdown_lines.append(
-                            "|"
-                            + "|".join(["-" * (len(h) + 2) for h in headers_truncated])
-                            + "|"
+                            "|" + "|".join(["-" * (len(h) + 2) for h in headers_truncated]) + "|"
                         )
 
                     # Add rows (limit to first 10 rows to avoid huge tables)
@@ -310,9 +296,7 @@ class HTMLNormalizer:
                         # Pad row to match header length
                         if headers:
                             row = row[: len(headers)]  # Trim extra columns
-                            row += [""] * (
-                                len(headers) - len(row)
-                            )  # Pad missing columns
+                            row += [""] * (len(headers) - len(row))  # Pad missing columns
 
                         # Truncate cells
                         row_truncated = [cell[:30] for cell in row]
@@ -370,8 +354,6 @@ class HTMLNormalizer:
         # Add truncation marker
         truncated += "\n[TRUNCATED]"
 
-        logger.warning(
-            "Text truncated", original_size=len(text), truncated_size=len(truncated)
-        )
+        logger.warning("Text truncated", original_size=len(text), truncated_size=len(truncated))
 
         return truncated

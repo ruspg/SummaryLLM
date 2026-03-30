@@ -83,9 +83,7 @@ def test_sender_fix_integration():
     assert msg_valid.sender == "boss@company.com"
 
     # Test fallback logic
-    sender_valid = (
-        msg_valid.sender or msg_valid.from_email or msg_valid.sender_email or ""
-    )
+    sender_valid = msg_valid.sender or msg_valid.from_email or msg_valid.sender_email or ""
     assert sender_valid == "boss@company.com"
 
     # Test actions extraction with valid sender

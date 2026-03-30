@@ -70,9 +70,7 @@ class SubjectNormalizer:
         self.prefix_pattern = re.compile("|".join(all_prefixes), re.IGNORECASE)
 
         # External markers
-        self.external_pattern = re.compile(
-            "|".join(self.EXTERNAL_MARKERS), re.IGNORECASE
-        )
+        self.external_pattern = re.compile("|".join(self.EXTERNAL_MARKERS), re.IGNORECASE)
 
         # Tags
         self.tag_pattern = re.compile("|".join(self.TAG_PATTERNS))

@@ -276,9 +276,7 @@ class MetricsCollector:
         self.html_hidden_removed_total = Counter(
             "html_hidden_removed_total",
             "Total hidden elements removed from HTML",
-            [
-                "element_type"
-            ],  # tracking_pixel, display_none, visibility_hidden, style_script_svg
+            ["element_type"],  # tracking_pixel, display_none, visibility_hidden, style_script_svg
             registry=self.registry,
         )
 
@@ -347,9 +345,7 @@ class MetricsCollector:
             operation=operation,
         )
 
-    def record_llm_tokens(
-        self, tokens_in: int, tokens_out: int, model: str = "unknown"
-    ):
+    def record_llm_tokens(self, tokens_in: int, tokens_out: int, model: str = "unknown"):
         """Record LLM token usage."""
         self.llm_tokens_in_total.inc(max(tokens_in, 0))
         self.llm_tokens_out_total.inc(max(tokens_out, 0))
@@ -393,9 +389,7 @@ class MetricsCollector:
     def record_pipeline_stage_duration(self, stage: str, duration_seconds: float):
         """Record pipeline stage duration."""
         self.pipeline_stage_duration.labels(stage=stage).observe(duration_seconds)
-        logger.debug(
-            "Recorded pipeline stage duration", stage=stage, duration=duration_seconds
-        )
+        logger.debug("Recorded pipeline stage duration", stage=stage, duration=duration_seconds)
 
     def record_error(self, error_type: str, stage: str):
         """Record error occurrence."""
@@ -404,9 +398,7 @@ class MetricsCollector:
 
     def record_cleaner_removed_chars(self, char_count: int, removal_type: str):
         """Record characters removed by email cleaner."""
-        self.email_cleaner_removed_chars_total.labels(removal_type=removal_type).inc(
-            char_count
-        )
+        self.email_cleaner_removed_chars_total.labels(removal_type=removal_type).inc(char_count)
         logger.debug(
             "Recorded cleaner removed chars",
             char_count=char_count,
@@ -415,9 +407,7 @@ class MetricsCollector:
 
     def record_cleaner_removed_blocks(self, block_count: int, removal_type: str):
         """Record blocks removed by email cleaner."""
-        self.email_cleaner_removed_blocks_total.labels(removal_type=removal_type).inc(
-            block_count
-        )
+        self.email_cleaner_removed_blocks_total.labels(removal_type=removal_type).inc(block_count)
         logger.debug(
             "Recorded cleaner removed blocks",
             block_count=block_count,
@@ -522,9 +512,7 @@ class MetricsCollector:
     def record_html_hidden_removed(self, element_type: str, count: int = 1):
         """Record hidden HTML element removed."""
         self.html_hidden_removed_total.labels(element_type=element_type).inc(count)
-        logger.debug(
-            "Recorded hidden element removed", element_type=element_type, count=count
-        )
+        logger.debug("Recorded hidden element removed", element_type=element_type, count=count)
 
     def update_system_metrics(self):
         """Update system metrics."""

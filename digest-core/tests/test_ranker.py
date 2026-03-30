@@ -257,9 +257,7 @@ class TestRankingFeatures:
             )
 
             features = ranker._extract_features(item, [chunk])
-            assert (
-                features.has_project_tag == expected
-            ), f"Failed for subject: {subject}"
+            assert features.has_project_tag == expected, f"Failed for subject: {subject}"
 
     def test_score_calculation(self):
         """Test score calculation from features."""

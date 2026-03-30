@@ -144,8 +144,7 @@ class DigestRanker:
             "Ranking completed",
             item_count=len(sorted_items),
             avg_score=(
-                sum(getattr(i, "rank_score", 0.0) for i in sorted_items)
-                / len(sorted_items)
+                sum(getattr(i, "rank_score", 0.0) for i in sorted_items) / len(sorted_items)
                 if sorted_items
                 else 0
             ),
@@ -153,9 +152,7 @@ class DigestRanker:
 
         return sorted_items
 
-    def _extract_features(
-        self, item: Any, evidence_chunks: List[Any]
-    ) -> RankingFeatures:
+    def _extract_features(self, item: Any, evidence_chunks: List[Any]) -> RankingFeatures:
         """
         Extract ranking features from item.
 
@@ -217,9 +214,7 @@ class DigestRanker:
                 break
 
         # Feature 4: sender importance
-        sender = getattr(chunk, "sender", "") or chunk.message_metadata.get(
-            "sender", ""
-        )
+        sender = getattr(chunk, "sender", "") or chunk.message_metadata.get("sender", "")
         if sender:
             features.sender_importance = self._calculate_sender_importance(sender)
 
@@ -227,18 +222,14 @@ class DigestRanker:
         if hasattr(chunk, "thread_id"):
             # Count chunks in same thread
             thread_chunks = [
-                c
-                for c in evidence_chunks
-                if getattr(c, "thread_id", None) == chunk.thread_id
+                c for c in evidence_chunks if getattr(c, "thread_id", None) == chunk.thread_id
             ]
             features.thread_length = len(thread_chunks)
 
         # Feature 6: recency
         if hasattr(chunk, "timestamp"):
             try:
-                timestamp = datetime.fromisoformat(
-                    chunk.timestamp.replace("Z", "+00:00")
-                )
+                timestamp = datetime.fromisoformat(chunk.timestamp.replace("Z", "+00:00"))
                 now = datetime.now(timezone.utc)
                 hours_diff = (now - timestamp).total_seconds() / 3600
                 features.hours_since_received = hours_diff
@@ -251,9 +242,9 @@ class DigestRanker:
             features.has_attachments = has_attachments
 
         # Feature 8: project tags
-        email_subject = getattr(
-            item, "email_subject", ""
-        ) or chunk.message_metadata.get("subject", "")
+        email_subject = getattr(item, "email_subject", "") or chunk.message_metadata.get(
+            "subject", ""
+        )
         if email_subject:
             if self.project_tag_pattern.search(email_subject):
                 features.has_project_tag = True
@@ -322,9 +313,7 @@ class DigestRanker:
                     important_domain = important[1:]
                     if domain == important_domain:
                         return 0.8
-                elif (
-                    "@" not in important and important in domain
-                ):  # Domain keyword match
+                elif "@" not in important and important in domain:  # Domain keyword match
                     return 0.7
 
         # Default: medium importance

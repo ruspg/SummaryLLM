@@ -120,9 +120,7 @@ class QuoteCleaner:
         ]
 
         # Compile patterns
-        self.quote_regex = re.compile(
-            "|".join(self.quote_markers), re.MULTILINE | re.IGNORECASE
-        )
+        self.quote_regex = re.compile("|".join(self.quote_markers), re.MULTILINE | re.IGNORECASE)
         self.signature_regex = re.compile(
             "|".join(self.signature_patterns), re.MULTILINE | re.IGNORECASE
         )
@@ -162,19 +160,13 @@ class QuoteCleaner:
             current_offset = 0  # Track offset shifts after removals
 
             # Stage 1: Remove autoresponses (highest priority)
-            cleaned_text, current_offset = self._remove_autoresponses(
-                cleaned_text, current_offset
-            )
+            cleaned_text, current_offset = self._remove_autoresponses(cleaned_text, current_offset)
 
             # Stage 2: Remove disclaimers
-            cleaned_text, current_offset = self._remove_disclaimers(
-                cleaned_text, current_offset
-            )
+            cleaned_text, current_offset = self._remove_disclaimers(cleaned_text, current_offset)
 
             # Stage 3: Remove signatures
-            cleaned_text, current_offset = self._remove_signatures(
-                cleaned_text, current_offset
-            )
+            cleaned_text, current_offset = self._remove_signatures(cleaned_text, current_offset)
 
             # Stage 4: Remove quotes (with optional top-quote preservation)
             cleaned_text, current_offset = self._remove_quotes_with_spans(
@@ -195,9 +187,7 @@ class QuoteCleaner:
                 original_length=len(text),
                 cleaned_length=len(cleaned_text),
                 removed_spans=len(self.removed_spans),
-                removal_rate=(
-                    1.0 - (len(cleaned_text) / len(text)) if len(text) > 0 else 0
-                ),
+                removal_rate=(1.0 - (len(cleaned_text) / len(text)) if len(text) > 0 else 0),
             )
 
             return cleaned_text, self.removed_spans
@@ -236,9 +226,7 @@ class QuoteCleaner:
 
         lines = text.split("\n")
         cleaned_lines = []
-        quote_state = (
-            None  # None, 'collecting_top', 'deep_quote', 'awaiting_quote_body'
-        )
+        quote_state = None  # None, 'collecting_top', 'deep_quote', 'awaiting_quote_body'
         top_quote_lines = []
         max_top_quote_lines = 10
         max_top_quote_paragraphs = 2
@@ -271,9 +259,7 @@ class QuoteCleaner:
                         has_prefixed_lines_ahead = False
                         for j in range(i + 1, min(i + 5, len(lines))):
                             future_line = lines[j]
-                            if future_line.strip() and future_line.lstrip().startswith(
-                                ">"
-                            ):
+                            if future_line.strip() and future_line.lstrip().startswith(">"):
                                 has_prefixed_lines_ahead = True
                                 break
 
@@ -619,13 +605,8 @@ class QuoteCleaner:
             removed_content = match.group()
 
             # Check safety limit
-            if (
-                self.config
-                and len(removed_content) > self.config.max_quote_removal_length
-            ):
-                logger.warning(
-                    "Autoresponse block too large, skipping", size=len(removed_content)
-                )
+            if self.config and len(removed_content) > self.config.max_quote_removal_length:
+                logger.warning("Autoresponse block too large, skipping", size=len(removed_content))
                 continue
 
             # Record removed span
@@ -656,13 +637,8 @@ class QuoteCleaner:
                 start_idx = idx - 1
 
             removed_content = "".join(lines[start_idx:])
-            if (
-                self.config
-                and len(removed_content) > self.config.max_quote_removal_length
-            ):
-                logger.warning(
-                    "Disclaimer block too large, skipping", size=len(removed_content)
-                )
+            if self.config and len(removed_content) > self.config.max_quote_removal_length:
+                logger.warning("Disclaimer block too large, skipping", size=len(removed_content))
                 continue
 
             start = sum(len(current) for current in lines[:start_idx])
@@ -737,9 +713,7 @@ class QuoteCleaner:
 
         removed_content = "".join(lines[quote_start:])
         if self.config and len(removed_content) > self.config.max_quote_removal_length:
-            logger.warning(
-                "Quoted block too large, skipping", size=len(removed_content)
-            )
+            logger.warning("Quoted block too large, skipping", size=len(removed_content))
             return text, offset
 
         start = sum(len(current) for current in lines[:quote_start])
@@ -786,9 +760,7 @@ class QuoteCleaner:
                         removed_any = True
                         break
                 except re.error as e:
-                    logger.error(
-                        "Invalid blacklist pattern", pattern=pattern, error=str(e)
-                    )
+                    logger.error("Invalid blacklist pattern", pattern=pattern, error=str(e))
             if not remove_line:
                 kept_lines.append(line)
 

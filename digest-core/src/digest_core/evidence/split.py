@@ -34,9 +34,7 @@ def _get_caps_cyrillic_pattern():
             pass
     # Fallback to explicit Unicode ranges
     # U+0410-U+042F = Cyrillic uppercase, U+0400-U+04FF = full Cyrillic block
-    return _stdre.compile(
-        r"^[A-Z\u0400-\u04FF][A-Z\u0400-\u04FF\s]{3,}:\s*$", _stdre.UNICODE
-    )
+    return _stdre.compile(r"^[A-Z\u0400-\u04FF][A-Z\u0400-\u04FF\s]{3,}:\s*$", _stdre.UNICODE)
 
 
 CAPS_HEADER_PATTERN = _get_caps_cyrillic_pattern()
@@ -164,9 +162,7 @@ class EvidenceSplitter:
 
         for thread in threads:
             try:
-                chunks = self._split_thread_evidence(
-                    thread, total_emails, total_threads
-                )
+                chunks = self._split_thread_evidence(thread, total_emails, total_threads)
                 all_chunks.extend(chunks)
             except Exception as e:
                 logger.warning(
@@ -224,9 +220,7 @@ class EvidenceSplitter:
             elif _stdre.match(r"^\s*\d+[\.)]\s+", line):
                 break_points.append(i)
             # Email markers (On ... wrote:, От:, From:)
-            elif _stdre.match(
-                r"^(On .+ wrote:|От:|From:|Subject:)", line, _stdre.IGNORECASE
-            ):
+            elif _stdre.match(r"^(On .+ wrote:|От:|From:|Subject:)", line, _stdre.IGNORECASE):
                 break_points.append(i)
             # Horizontal rules
             elif _stdre.match(r"^[\-\*=]{3,}\s*$", line):
@@ -347,10 +341,7 @@ class EvidenceSplitter:
             sentence_tokens = len(sentence) // 4
 
             if (len(current_chunk) // 4) + sentence_tokens > self.max_tokens_per_chunk:
-                if (
-                    current_chunk
-                    and (len(current_chunk) // 4) >= self.min_tokens_per_chunk
-                ):
+                if current_chunk and (len(current_chunk) // 4) >= self.min_tokens_per_chunk:
                     chunk = self._create_evidence_chunk(
                         current_chunk,
                         conversation_id,
@@ -400,9 +391,7 @@ class EvidenceSplitter:
     ) -> EvidenceChunk:
         """Create an evidence chunk from content."""
         evidence_id = str(uuid.uuid4())
-        token_count = int(
-            len(content.split()) * 1.3
-        )  # Token estimation: 1.3 tokens per word
+        token_count = int(len(content.split()) * 1.3)  # Token estimation: 1.3 tokens per word
 
         # Calculate priority score based on content characteristics
         priority_score = self._calculate_priority_score(content, message)
@@ -425,16 +414,10 @@ class EvidenceSplitter:
             "received_at": signals.normalize_datetime_to_tz(
                 message.datetime_received, self.user_timezone
             ),
-            "importance": (
-                message.importance if hasattr(message, "importance") else "Normal"
-            ),
-            "is_flagged": (
-                message.is_flagged if hasattr(message, "is_flagged") else False
-            ),
+            "importance": (message.importance if hasattr(message, "importance") else "Normal"),
+            "is_flagged": (message.is_flagged if hasattr(message, "is_flagged") else False),
             "has_attachments": (
-                message.has_attachments
-                if hasattr(message, "has_attachments")
-                else False
+                message.has_attachments if hasattr(message, "has_attachments") else False
             ),
             "attachment_types": (
                 message.attachment_types if hasattr(message, "attachment_types") else []
@@ -538,9 +521,7 @@ class EvidenceSplitter:
         # Recent messages get higher priority
         from datetime import datetime, timezone
 
-        hours_ago = (
-            datetime.now(timezone.utc) - message.datetime_received
-        ).total_seconds() / 3600
+        hours_ago = (datetime.now(timezone.utc) - message.datetime_received).total_seconds() / 3600
         if hours_ago < 1:
             score += 2.0
         elif hours_ago < 6:

@@ -119,9 +119,7 @@ class LLMGateway:
         response_data = self._make_request_with_retry(messages, trace_id, None)
 
         # Validate response
-        validated_response = self._validate_response(
-            response_data.get("data", {}), evidence
-        )
+        validated_response = self._validate_response(response_data.get("data", {}), evidence)
 
         # If empty result but we have promising evidence, perform one quality retry
         if not validated_response.get("sections"):
@@ -152,11 +150,7 @@ class LLMGateway:
         # Attach meta if available
         if "meta" in response_data:
             response_data["meta"].update(
-                {
-                    "validation_errors": self.last_request_meta.get(
-                        "validation_errors", 0
-                    )
-                }
+                {"validation_errors": self.last_request_meta.get("validation_errors", 0)}
             )
             validated_response["_meta"] = response_data["meta"]
             self.last_request_meta = dict(response_data["meta"])
@@ -168,9 +162,7 @@ class LLMGateway:
 
         for i, chunk in enumerate(evidence):
             # Extract metadata with safe defaults
-            metadata = (
-                chunk.message_metadata if hasattr(chunk, "message_metadata") else {}
-            )
+            metadata = chunk.message_metadata if hasattr(chunk, "message_metadata") else {}
             sender = metadata.get("from", "N/A")
             to_list = metadata.get("to", [])
             cc_list = metadata.get("cc", [])
@@ -193,9 +185,7 @@ class LLMGateway:
             subject_trunc = subject[:80] + "..." if len(subject) > 80 else subject
 
             # Format attachments
-            attachments_str = (
-                ", ".join(attachment_types) if attachment_types else "none"
-            )
+            attachments_str = ", ".join(attachment_types) if attachment_types else "none"
 
             # Extract AddressedToMe info
             addressed_to_me = getattr(chunk, "addressed_to_me", False)
@@ -278,9 +268,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
 
         raise RuntimeError("LLM retry loop exited without a response")
 
-    def _make_request_once(
-        self, messages: List[Dict[str, str]], trace_id: str
-    ) -> Dict[str, Any]:
+    def _make_request_once(self, messages: List[Dict[str, str]], trace_id: str) -> Dict[str, Any]:
         """Perform a single HTTP request to the LLM gateway (or replay from file)."""
         # ── REPLAY MODE ──────────────────────────────────────────────
         if self._replay_data is not None:
@@ -323,9 +311,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
                 trace_id=trace_id,
             )
             if status_code == 429:
-                retry_after = self._retry_after_seconds(
-                    exc.response.headers.get("Retry-After")
-                )
+                retry_after = self._retry_after_seconds(exc.response.headers.get("Retry-After"))
                 raise RetryableLLMError(str(exc), retry_after) from exc
             if 500 <= status_code < 600:
                 raise RetryableLLMError(str(exc), 5.0) from exc
@@ -482,9 +468,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
 
         return entry
 
-    def _record_response(
-        self, messages: List[Dict[str, str]], result: Dict[str, Any]
-    ) -> None:
+    def _record_response(self, messages: List[Dict[str, str]], result: Dict[str, Any]) -> None:
         """Append an LLM response to the record file."""
         if self._record_path.exists():
             existing = json.loads(self._record_path.read_text(encoding="utf-8"))
@@ -530,17 +514,13 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
             total_items = 0
             validated_items = 0
             for section in response_data["sections"]:
-                total_items += (
-                    len(section.get("items", [])) if isinstance(section, dict) else 0
-                )
+                total_items += len(section.get("items", [])) if isinstance(section, dict) else 0
                 validated_section = self._validate_section(section, evidence)
                 if validated_section:
                     validated_items += len(validated_section.get("items", []))
                     validated_sections.append(validated_section)
             if self.last_request_meta:
-                self.last_request_meta["validation_errors"] = max(
-                    total_items - validated_items, 0
-                )
+                self.last_request_meta["validation_errors"] = max(total_items - validated_items, 0)
             return {"sections": validated_sections}
 
         except Exception as e:
@@ -553,11 +533,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         self, section: Dict[str, Any], evidence: List[EvidenceChunk]
     ) -> Optional[Dict[str, Any]]:
         """Validate a section and its items."""
-        if (
-            not isinstance(section, dict)
-            or "title" not in section
-            or "items" not in section
-        ):
+        if not isinstance(section, dict) or "title" not in section or "items" not in section:
             return None
 
         validated_items = []
@@ -605,9 +581,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
             "source_ref": source_ref,
         }
 
-    def summarize_digest(
-        self, digest_data: Digest, prompt_template: str, trace_id: str
-    ) -> str:
+    def summarize_digest(self, digest_data: Digest, prompt_template: str, trace_id: str) -> str:
         """Generate markdown summary of digest."""
         logger.info("Starting LLM digest summarization", trace_id=trace_id)
 
@@ -621,16 +595,11 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         ]
 
         # Make request
-        response_data = self._make_request_with_retry(
-            messages, trace_id, digest_data.digest_date
-        )
+        response_data = self._make_request_with_retry(messages, trace_id, digest_data.digest_date)
 
         # Extract markdown content
         content = (
-            response_data["data"]
-            .get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "")
+            response_data["data"].get("choices", [{}])[0].get("message", {}).get("content", "")
         )
 
         logger.info("LLM digest summarization completed", trace_id=trace_id)
@@ -751,30 +720,22 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
             )
 
         except Exception as llm_err:
-            logger.error(
-                "LLM digest processing failed", error=str(llm_err), trace_id=trace_id
-            )
+            logger.error("LLM digest processing failed", error=str(llm_err), trace_id=trace_id)
 
             if not self.enable_degrade or custom_input:
                 # Don't degrade hierarchical mode (custom_input) or if degrade disabled
                 raise
 
             # Determine reason for degradation
-            reason = (
-                "llm_json_error" if "JSON" in str(llm_err) else "llm_processing_failed"
-            )
+            reason = "llm_json_error" if "JSON" in str(llm_err) else "llm_processing_failed"
 
             # Record degradation metric
             if self.metrics:
                 self.metrics.record_degradation(reason)
 
             # Use extractive fallback
-            logger.warning(
-                "Using extractive fallback for digest", trace_id=trace_id, reason=reason
-            )
-            fallback_digest = extractive_fallback(
-                evidence, digest_date, trace_id, reason=reason
-            )
+            logger.warning("Using extractive fallback for digest", trace_id=trace_id, reason=reason)
+            fallback_digest = extractive_fallback(evidence, digest_date, trace_id, reason=reason)
 
             return {
                 "trace_id": trace_id,
@@ -811,9 +772,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
         try:
             template_path = get_prompt_template_path(template_name)
         except KeyError as exc:
-            raise ValueError(
-                f"Unknown digest prompt version: {prompt_version}"
-            ) from exc
+            raise ValueError(f"Unknown digest prompt version: {prompt_version}") from exc
 
         try:
             template = env.get_template(template_path)
@@ -862,9 +821,7 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
             else:
                 digest = EnhancedDigest(**validated)
         except Exception as e:
-            logger.error(
-                "Failed to parse digest", error=str(e), prompt_version=prompt_version
-            )
+            logger.error("Failed to parse digest", error=str(e), prompt_version=prompt_version)
             raise ValueError(f"Invalid digest structure: {e}")
 
         logger.info(
@@ -994,9 +951,7 @@ Evidence:
 
         return parsed
 
-    def _validate_enhanced_schema(
-        self, response_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _validate_enhanced_schema(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Validate response against enhanced schema using jsonschema.
 

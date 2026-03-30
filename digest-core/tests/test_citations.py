@@ -308,9 +308,7 @@ class TestCitationValidator:
 
     def test_validate_message_not_found(self):
         """Test validation when message not found in map."""
-        citation = Citation(
-            msg_id="msg-999", start=0, end=10, preview="test", checksum=None
-        )
+        citation = Citation(msg_id="msg-999", start=0, end=10, preview="test", checksum=None)
 
         validator = CitationValidator({"msg-001": "test"})
         is_valid, error = validator.validate_citation(citation)
@@ -321,12 +319,8 @@ class TestCitationValidator:
     def test_validate_multiple_citations_success(self, simple_normalized_map):
         """Test validation of multiple valid citations."""
         citations = [
-            Citation(
-                msg_id="msg-001", start=0, end=10, preview="This is a ", checksum=None
-            ),
-            Citation(
-                msg_id="msg-002", start=0, end=11, preview="Привет! Это", checksum=None
-            ),
+            Citation(msg_id="msg-001", start=0, end=10, preview="This is a ", checksum=None),
+            Citation(msg_id="msg-002", start=0, end=11, preview="Привет! Это", checksum=None),
             Citation(msg_id="msg-003", start=0, end=5, preview="Short", checksum=None),
         ]
 
@@ -359,9 +353,7 @@ class TestCitationValidator:
     def test_validate_strict_mode_stops_on_first_error(self, simple_normalized_map):
         """Test strict mode stops on first error."""
         citations = [
-            Citation(
-                msg_id="msg-999", start=0, end=10, preview="test", checksum=None
-            ),  # Invalid
+            Citation(msg_id="msg-999", start=0, end=10, preview="test", checksum=None),  # Invalid
             Citation(
                 msg_id="msg-001", start=20, end=10, preview="test", checksum=None
             ),  # Invalid but schema-valid
@@ -393,14 +385,9 @@ class TestEnrichItemWithCitations:
 
         assert len(action.citations) == 1
         assert action.citations[0].msg_id == "msg-001"
-        assert (
-            action.citations[0].preview
-            == "important action items to complete by Friday"
-        )
+        assert action.citations[0].preview == "important action items to complete by Friday"
 
-    def test_enrich_item_no_matching_chunk(
-        self, simple_normalized_map, simple_evidence_chunk
-    ):
+    def test_enrich_item_no_matching_chunk(self, simple_normalized_map, simple_evidence_chunk):
         """Test enriching item when no matching chunk found."""
         action = ActionItem(
             title="Complete task",

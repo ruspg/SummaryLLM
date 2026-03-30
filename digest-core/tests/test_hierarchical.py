@@ -163,15 +163,11 @@ class TestDegradation:
         # Create mock chunks
         chunk1 = Mock(spec=EvidenceChunk)
         chunk1.evidence_id = "ev_1"
-        chunk1.content = (
-            "First chunk content with important information about the project status."
-        )
+        chunk1.content = "First chunk content with important information about the project status."
 
         chunk2 = Mock(spec=EvidenceChunk)
         chunk2.evidence_id = "ev_2"
-        chunk2.content = (
-            "Second chunk content with action items that need to be completed."
-        )
+        chunk2.content = "Second chunk content with action items that need to be completed."
 
         chunks = [chunk1, chunk2]
 
@@ -188,9 +184,7 @@ class TestDegradation:
 class TestFinalAggregation:
     """Test final aggregation to EnhancedDigest v2."""
 
-    @patch(
-        "digest_core.hierarchical.processor.HierarchicalProcessor._final_aggregation"
-    )
+    @patch("digest_core.hierarchical.processor.HierarchicalProcessor._final_aggregation")
     def test_final_aggregation_to_enhanced_digest_v2(self, mock_aggregation):
         """Test final output is EnhancedDigest v2."""
         # Mock the return value

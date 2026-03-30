@@ -74,9 +74,7 @@ class HierarchicalProcessor:
         email_threshold = min(self.config.threshold_emails, self.config.min_emails)
 
         # Check thresholds for auto-activation
-        meets_threshold = (
-            len(threads) >= thread_threshold or len(emails) >= email_threshold
-        )
+        meets_threshold = len(threads) >= thread_threshold or len(emails) >= email_threshold
 
         if meets_threshold:
             logger.info(
@@ -286,9 +284,7 @@ class HierarchicalProcessor:
                     summaries.append(degraded)
 
                 except Exception as e:
-                    logger.error(
-                        "Thread summarization failed", thread_id=thread_id, error=str(e)
-                    )
+                    logger.error("Thread summarization failed", thread_id=thread_id, error=str(e))
                     self.metrics.errors += 1
 
                     # Try to create minimal summary anyway
@@ -332,9 +328,7 @@ class HierarchicalProcessor:
         regular_chunks = []
 
         # Find last update chunk (most recent)
-        last_update_chunk = max(
-            chunks, key=lambda c: c.timestamp if c.timestamp else ""
-        )
+        last_update_chunk = max(chunks, key=lambda c: c.timestamp if c.timestamp else "")
 
         # Categorize chunks
         for chunk in chunks:
@@ -343,18 +337,14 @@ class HierarchicalProcessor:
                 chunk_text = chunk.text.lower()
                 if any(alias.lower() in chunk_text for alias in user_aliases):
                     must_include_chunks.append(chunk)
-                    logger.debug(
-                        "Must-include: mention chunk", evidence_id=chunk.evidence_id
-                    )
+                    logger.debug("Must-include: mention chunk", evidence_id=chunk.evidence_id)
                     continue
 
             # Check if last update
             if self.config.must_include_last_update and chunk == last_update_chunk:
                 if chunk not in must_include_chunks:
                     must_include_chunks.append(chunk)
-                    logger.debug(
-                        "Must-include: last update chunk", evidence_id=chunk.evidence_id
-                    )
+                    logger.debug("Must-include: last update chunk", evidence_id=chunk.evidence_id)
                     continue
 
             # Regular chunk
@@ -372,9 +362,7 @@ class HierarchicalProcessor:
                 max_chunks=max_chunks,
                 exception_limit=self.config.per_thread_max_chunks_exception,
             )
-            regular_slots = max(
-                0, self.config.per_thread_max_chunks_exception - must_include_count
-            )
+            regular_slots = max(0, self.config.per_thread_max_chunks_exception - must_include_count)
 
         # Select top regular chunks
         selected_regular = regular_chunks[:regular_slots]
@@ -443,15 +431,11 @@ class HierarchicalProcessor:
         try:
             template_rel_path = get_prompt_template_path("thread_summarize.v1")
         except KeyError as exc:
-            raise ValueError(
-                "Unknown thread summary prompt template: thread_summarize.v1"
-            ) from exc
+            raise ValueError("Unknown thread summary prompt template: thread_summarize.v1") from exc
         env = Environment(loader=FileSystemLoader(str(PROJECT_ROOT / "prompts")))
         template = env.get_template(template_rel_path)
 
-        rendered = template.render(
-            thread_id=thread_id, chunk_count=len(chunks), chunks=chunks_text
-        )
+        rendered = template.render(thread_id=thread_id, chunk_count=len(chunks), chunks=chunks_text)
 
         # Call LLM
         messages = [{"role": "user", "content": rendered}]
@@ -599,9 +583,7 @@ class HierarchicalProcessor:
 
         return "\n".join(parts)
 
-    def _degrade_thread_summary(
-        self, thread_id: str, chunks: List[EvidenceChunk]
-    ) -> ThreadSummary:
+    def _degrade_thread_summary(self, thread_id: str, chunks: List[EvidenceChunk]) -> ThreadSummary:
         """
         Create degraded thread summary from best chunks (fallback on timeout/error).
 
@@ -614,8 +596,7 @@ class HierarchicalProcessor:
         """
         # Create minimal summary from chunk contents
         summary_text = (
-            "Thread summary (degraded): "
-            + " | ".join(c.content[:100] for c in chunks)[:300]
+            "Thread summary (degraded): " + " | ".join(c.content[:100] for c in chunks)[:300]
         )
 
         evidence_ids = [c.evidence_id for c in chunks]
@@ -760,9 +741,7 @@ class HierarchicalProcessor:
 
         return input_text
 
-    def _shrink_aggregator_input(
-        self, input_text: str, summaries: List[ThreadSummary]
-    ) -> str:
+    def _shrink_aggregator_input(self, input_text: str, summaries: List[ThreadSummary]) -> str:
         """
         Shrink aggregator input to fit token cap.
 
@@ -799,9 +778,7 @@ class HierarchicalProcessor:
             if summary.deadlines:
                 parts.append(f"\nDeadlines ({len(summary.deadlines)}):")
                 for dl in summary.deadlines[:3]:  # Limit to top 3
-                    parts.append(
-                        f"  - {dl.title} at {dl.date_time} (ev: {dl.evidence_id})"
-                    )
+                    parts.append(f"  - {dl.title} at {dl.date_time} (ev: {dl.evidence_id})")
 
             parts.append("")
 
@@ -810,9 +787,7 @@ class HierarchicalProcessor:
         current_tokens = int(len(current_text.split()) * 1.3)
 
         for summary in other_summaries:
-            summary_text = (
-                f"=== Thread: {summary.thread_id} ===\nSummary: {summary.summary}\n\n"
-            )
+            summary_text = f"=== Thread: {summary.thread_id} ===\nSummary: {summary.summary}\n\n"
             summary_tokens = int(len(summary_text.split()) * 1.3)
 
             if current_tokens + summary_tokens <= self.config.final_input_token_cap:

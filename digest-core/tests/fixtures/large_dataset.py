@@ -11,9 +11,7 @@ import random
 from digest_core.ingest.ews import NormalizedMessage
 
 
-def generate_large_email_dataset(
-    count: int = 300, seed: int = 42
-) -> List[NormalizedMessage]:
+def generate_large_email_dataset(count: int = 300, seed: int = 42) -> List[NormalizedMessage]:
     """
     Generate synthetic 300+ email dataset with known actions/deadlines.
 
@@ -135,12 +133,8 @@ def _generate_thread(
 
         # Add action signals
         if has_actions and i == size - 1:  # Last message has action
-            content_parts.append(
-                "\nПожалуйста, проверьте и согласуйте документ до конца недели."
-            )
-            content_parts.append(
-                "Please review and approve the document by end of week."
-            )
+            content_parts.append("\nПожалуйста, проверьте и согласуйте документ до конца недели.")
+            content_parts.append("Please review and approve the document by end of week.")
 
         # Add deadline signals
         if has_deadlines and i == size - 2:  # Second to last has deadline

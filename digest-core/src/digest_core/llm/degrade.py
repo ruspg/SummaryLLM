@@ -48,9 +48,7 @@ def extractive_fallback(
     fyi = []
 
     # Sort chunks by priority
-    sorted_chunks = sorted(
-        evidence_chunks, key=lambda c: c.priority_score, reverse=True
-    )
+    sorted_chunks = sorted(evidence_chunks, key=lambda c: c.priority_score, reverse=True)
 
     for chunk in sorted_chunks:
         # Extract metadata
@@ -172,9 +170,7 @@ def build_digest_with_fallback(
         return {"digest": digest, "partial": False, "reason": None}
 
     except Exception as llm_err:
-        logger.error(
-            "LLM digest generation failed", error=str(llm_err), trace_id=trace_id
-        )
+        logger.error("LLM digest generation failed", error=str(llm_err), trace_id=trace_id)
 
         if not enable_degrade:
             raise

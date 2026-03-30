@@ -205,14 +205,10 @@ Final section.
         splitter = EvidenceSplitter()
 
         # Low load - should allow more chunks
-        chunks_low = splitter.split_evidence(
-            [thread], total_emails=100, total_threads=30
-        )
+        chunks_low = splitter.split_evidence([thread], total_emails=100, total_threads=30)
 
         # High load - should reduce chunks
-        chunks_high = splitter.split_evidence(
-            [thread], total_emails=250, total_threads=70
-        )
+        chunks_high = splitter.split_evidence([thread], total_emails=250, total_threads=70)
 
         # High load should produce fewer or equal chunks
         assert len(chunks_high) <= len(chunks_low)
@@ -245,12 +241,8 @@ Final section.
 
         splitter = EvidenceSplitter()
 
-        chunks_short = splitter.split_evidence(
-            [thread_short], total_emails=100, total_threads=30
-        )
-        chunks_long = splitter.split_evidence(
-            [thread_long], total_emails=100, total_threads=30
-        )
+        chunks_short = splitter.split_evidence([thread_short], total_emails=100, total_threads=30)
+        chunks_long = splitter.split_evidence([thread_long], total_emails=100, total_threads=30)
 
         # Long email should have fewer chunks (max 3)
         assert len(chunks_long) <= 3

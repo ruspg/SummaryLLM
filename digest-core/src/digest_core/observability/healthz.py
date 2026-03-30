@@ -62,8 +62,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
         # Determine overall readiness
         all_healthy = all(
-            check.get("status") in {"healthy", "unknown"}
-            for check in checks["checks"].values()
+            check.get("status") in {"healthy", "unknown"} for check in checks["checks"].values()
         )
 
         checks["status"] = "ready" if all_healthy else "not_ready"

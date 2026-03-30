@@ -48,14 +48,17 @@ Full contracts in `docs/ARCHITECTURE.md §4`.
 
 | File | Purpose |
 |------|---------|
-| `src/digest_core/cli.py` | Typer CLI entry point (`run`, `diagnose`) |
-| `src/digest_core/run.py` | Pipeline orchestration (TD-001: needs refactor, copy-paste) |
-| `src/digest_core/config.py` | Pydantic config (TD-003: YAML overwrites ENV — known bug) |
-| `src/digest_core/llm/gateway.py` | LLM HTTP client (TD-011: needs 429/5xx retry) |
+| `src/digest_core/cli.py` | Typer CLI (`run`, `diagnose`, `export-diagnostics`, replay/dump flags) |
+| `src/digest_core/run.py` | Pipeline orchestration (unified path; dry-run, MM delivery, partial digest) |
+| `src/digest_core/config.py` | Pydantic config; YAML merged into models without clobbering ENV |
+| `src/digest_core/llm/gateway.py` | LLM HTTP client (JSON retry, 429/5xx retry, rate-limit spacing) |
 | `src/digest_core/llm/schemas.py` | Pydantic output schemas: Digest, Section, Item |
-| `prompts/extract_actions.v1.j2` | Extraction prompt (TD-005: needs rewrite, 23 lines too minimal) |
+| `prompts/extract_actions.v1.txt` | RU extraction prompt (plain text, not Jinja2) |
+| `prompts/extract_actions.en.v1.txt` | EN extraction prompt |
+| `src/digest_core/deliver/mattermost.py` | Mattermost incoming webhook delivery |
+| `src/digest_core/diagnostics.py` | Diagnostic bundle export (`export-diagnostics`) |
 | `configs/config.example.yaml` | Reference config |
-| `docs/ARCHITECTURE.md` | **Source of truth** — all decisions, contracts, roadmap |
+| `docs/ARCHITECTURE.md` | **Source of truth** — contracts & roadmap (§13 may lag vs code; verify in tests) |
 
 ## Code Style
 
@@ -69,7 +72,7 @@ Full contracts in `docs/ARCHITECTURE.md §4`.
 make test    # All tests use mocks, run anywhere
 ```
 
-- Tests in `tests/test_*.py` (13 files)
+- Tests in `tests/test_*.py` (40+ modules; `make test` is the checklist)
 - Fixtures in `tests/fixtures/emails/` (10 email samples)
 - Mock LLM in `tests/mock_llm_gateway.py`
 - **Real EWS/LLM tests**: corp network only. Use replay mode for offline dev.
@@ -83,13 +86,13 @@ make test    # All tests use mocks, run anywhere
 
 ## Gotchas
 
-- **`run.py:168` relative path**: `Path("prompts")` breaks outside `digest-core/` dir. Always `cd digest-core` before running. (TD-002, fix pending)
-- **Config precedence bug (TD-003)**: YAML files overwrite ENV vars. If you set `EWS_PASSWORD` in `.env` but also have `ews:` in YAML, the YAML wins. Workaround: don't put EWS/LLM settings in YAML.
+- **CLI from repo root**: Top-level `digest_core/` package extends the path into `digest-core/src`; use `python3 -m digest_core.cli` from the monorepo root or `cd digest-core` and the same module name.
+- **Dry-run still hits EWS** unless you pass `--replay-ingest <snapshot.json>`; missing/invalid EWS env fails fast with a clear error.
 - **NormalizedMessage naming**: Output of Stage 1 (INGEST) is named `NormalizedMessage` but body is still raw HTML. Actual normalization happens in Stage 2. Don't be confused.
-- **Idempotency**: If artifacts exist and are <48h old, pipeline skips. Delete `out/digest-*.json` to force re-run (or use `--force` when implemented).
+- **Idempotency**: If artifacts exist and are <48h old, pipeline skips. Use `run --force` to bypass the T-48h window.
 - **Token estimation**: `words * 1.3` approximation, NOT tiktoken. Off by ~10% but fine for 3000-token budget.
-- **LLM timeout**: Default 45s too low for qwen3.5-397b (TD-013). Bump to 120 in config.
-- **Prompt files are `.j2` but NOT Jinja2**: Loaded via `.read_text()`, no template engine (ADR-009).
+- **LLM timeout**: Default `timeout_s` is 120s for qwen3.5-397b (see `LLMConfig`).
+- **Extraction prompts**: `extract_actions*.txt` are plain text (ADR-009). Other flows may still reference `.j2` paths via `llm/prompt_registry.py` (e.g. hierarchical summarize).
 
 ## Environment Variables
 
@@ -122,14 +125,10 @@ python -m digest_core.cli run --replay-ingest /tmp/ews-snapshot.json
 python -m digest_core.cli export-diagnostics --trace-id <id> --send-mm
 ```
 
-## Active Tech Debt (Phase 0)
+## Active Tech Debt
 
-| ID | What | Severity |
-|----|------|----------|
-| TD-005 | Prompt too minimal (23 lines) | Critical |
-| TD-002 | Relative prompt path | High |
-| TD-003 | Config: YAML overwrites ENV | High |
-| TD-004 | No graceful LLM degradation | High |
-| TD-011 | No HTTP 429/5xx retry | High |
+Phase 0 hardening (prompts, path resolution, config precedence, LLM retry/degradation, Mattermost delivery, replay/diagnostics, E2E tests) is implemented on `main` as of 2026-03.
 
-Full list: `docs/ARCHITECTURE.md §13`
+Authoritative checklist: `docs/ARCHITECTURE.md §13`. That table is not fully reconciled with the codebase yet—verify behavior with `make test` and source before treating a TD row as open.
+
+Suggested doc follow-up: refresh `ARCHITECTURE.md` §9.1 (prompt filenames), §5.2 (TD-003 narrative), and §8/§13 rows that still describe pre-merge behavior.

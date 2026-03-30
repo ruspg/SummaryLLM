@@ -32,7 +32,7 @@ Monorepo with one package. All development happens in `digest-core/`.
 - Every digest item MUST cite `evidence_id` and `source_ref` (principle P2: Traceability).
 - Secrets via ENV only — never in YAML config files.
 - Extract-over-Generate: LLM extracts from evidence, does not hallucinate (principle P1).
-- Single LLM call per run — 15 RPM rate limit on qwen3.5-397b (ADR-008).
+- Single LLM call per run — 15 RPM rate limit on qwen3.5-397b-a17b (ADR-008).
 
 ## Network Topology
 

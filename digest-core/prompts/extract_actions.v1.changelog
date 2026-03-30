@@ -1,0 +1,4 @@
+# CHANGELOG
+# v1.0 2026-03-29 — initial version: base taxonomy (Мои действия/Срочное/К сведению), JSON contract, confidence calibration
+# v1.1 2026-03-30 — expanded prompt to 189 lines: added few-shot examples (x3), edge cases, pre-answer checklist
+# END_CHANGELOG

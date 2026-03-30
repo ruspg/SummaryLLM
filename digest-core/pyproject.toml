@@ -17,6 +17,13 @@ dependencies = [
   "regex>=2023.0",
 ]
 
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.5",
+  "black>=24.0",
+]
+
 [tool.pytest.ini_options]
 markers = [
     "slow: tests that are intentionally slower than the rest of the suite",

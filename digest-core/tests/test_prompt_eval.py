@@ -2,7 +2,6 @@
 
 import json
 import pytest
-from pathlib import Path
 
 from digest_core.eval.prompt_eval import (
     evaluate_digest,
@@ -19,7 +18,6 @@ from digest_core.eval.changelog import (
     parse_prompt_changelog,
     get_current_version,
     format_changelog,
-    PromptVersion,
 )
 
 
@@ -551,6 +549,46 @@ class TestReportOutput:
         assert "total_items" in d
         assert "section_counts" in d
         assert "issues" in d
+        assert "quality_rate" in d
+
+
+# ── Per-item quality rate ─────────────────────────────────────────────────────
+
+class TestQualityRate:
+    def test_perfect_digest_rate_is_1(self):
+        report = evaluate_digest(GOOD_DIGEST)
+        assert report.quality_rate == 1.0
+
+    def test_empty_digest_rate_is_1(self):
+        digest = {**GOOD_DIGEST, "sections": []}
+        report = evaluate_digest(digest)
+        assert report.quality_rate == 1.0
+
+    def test_one_bad_item_reduces_rate(self):
+        digest = {
+            **GOOD_DIGEST,
+            "sections": [
+                {
+                    "title": SECTION_ACTIONS,
+                    "items": [
+                        {
+                            "title": "Good item",
+                            "due": None,
+                            "evidence_id": "ev-001",
+                            "confidence": 0.9,
+                            "source_ref": {"type": "email", "msg_id": "msg-001"},
+                        },
+                        {
+                            "title": "Bad item",
+                            "due": None,
+                            # missing evidence_id, source_ref, confidence
+                        },
+                    ],
+                }
+            ],
+        }
+        report = evaluate_digest(digest)
+        assert report.quality_rate == 0.5  # 1 of 2 items is clean
 
 
 # ── File-based evaluation ─────────────────────────────────────────────────────
@@ -638,14 +676,23 @@ Actual prompt content here.
         output = format_changelog([])
         assert "no changelog" in output.lower()
 
+    def test_companion_file_preferred_over_inline(self, tmp_path):
+        """If a .changelog companion file exists, it should be used instead of inline."""
+        prompt = tmp_path / "prompt.txt"
+        prompt.write_text("Just a prompt, no changelog.", encoding="utf-8")
+        companion = tmp_path / "prompt.changelog"
+        companion.write_text(self.PROMPT_WITH_CHANGELOG, encoding="utf-8")
+        versions = parse_prompt_changelog(prompt)
+        assert len(versions) == 3
+
     def test_actual_prompt_file_has_changelog(self):
-        """Smoke test: the real extract_actions.v1.txt must have a parseable changelog."""
+        """Smoke test: the real extract_actions.v1.changelog must have parseable entries."""
         from digest_core.config import PROJECT_ROOT
         prompt_path = PROJECT_ROOT / "prompts" / "extract_actions.v1.txt"
         if not prompt_path.exists():
             pytest.skip("Prompt file not found")
         versions = parse_prompt_changelog(prompt_path)
-        assert len(versions) >= 1, "extract_actions.v1.txt must have at least one changelog entry"
+        assert len(versions) >= 1, "extract_actions.v1 must have at least one changelog entry"
 
 
 # ── CLI integration smoke test ────────────────────────────────────────────────

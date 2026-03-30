@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
@@ -107,6 +108,22 @@ class EvalReport:
     def infos(self) -> List[EvalIssue]:
         return [i for i in self.issues if i.severity == ISSUE_INFO]
 
+    @property
+    def items_without_errors(self) -> int:
+        """Number of items that have zero error-level issues."""
+        error_items = {
+            i.item_title for i in self.issues
+            if i.severity == ISSUE_ERROR and i.item_title
+        }
+        return max(0, self.total_items - len(error_items))
+
+    @property
+    def quality_rate(self) -> float:
+        """Per-item quality rate: fraction of items with no errors (0.0–1.0)."""
+        if self.total_items == 0:
+            return 1.0  # empty digest is valid
+        return self.items_without_errors / self.total_items
+
     def _grade(self) -> str:
         if self.score >= 90:
             return "A"
@@ -126,6 +143,7 @@ class EvalReport:
         lines.append(
             f"Score: **{self.score}/100** (grade {self._grade()}) | "
             f"Items: {self.total_items} | "
+            f"Clean items: {self.quality_rate:.0%} | "
             f"Errors: {len(self.errors)} | Warnings: {len(self.warnings)}"
         )
 
@@ -161,6 +179,7 @@ class EvalReport:
             "total_items": self.total_items,
             "section_counts": self.section_counts,
             "evidence_ids_checked": self.evidence_ids_checked,
+            "quality_rate": round(self.quality_rate, 3),
             "errors": len(self.errors),
             "warnings": len(self.warnings),
             "issues": [
@@ -367,8 +386,7 @@ def _check_item(
 
     # ── due date format ───────────────────────────────────────────────────────
     due = item.get("due")
-    if due is not None and due not in ("today", "tomorrow", None):
-        import re
+    if due is not None and due not in ("today", "tomorrow"):
         if not re.match(r"^\d{4}-\d{2}-\d{2}$", str(due)):
             report.issues.append(EvalIssue(
                 ISSUE_WARN, "due_date",
@@ -411,15 +429,52 @@ def evaluate_digest_file(
 
 def _extract_evidence_ids(snapshot: Dict[str, Any]) -> Set[str]:
     """
-    Extract all evidence_ids from an ingest or LLM-replay snapshot.
+    Extract valid evidence_ids from a snapshot file.
 
-    Supports two formats:
-    - ingest snapshot: {"messages": [...]} with nested evidence_id fields
-    - LLM replay:      {"responses": [{"data": {"sections": [...]}}]}
+    Supports these formats (tried in order):
+
+    1. **Explicit evidence list** — ``{"evidence_ids": ["ev-001", ...]}``
+       Simplest: a file you create manually with the IDs sent to the LLM.
+
+    2. **Flat chunk list** — ``{"chunks": [{"evidence_id": "ev-001", ...}, ...]}``
+       Matches evidence output from the pipeline's split stage.
+
+    3. **LLM replay** — ``{"responses": [{"data": {"sections": [...]}}]}``
+       Falls back to parsing evidence_ids from the *input messages* text
+       using the ``Evidence N (ID: <id>, ...)`` pattern that ``run.py``
+       formats for the LLM.  If no input messages are recorded, this
+       extracts from the output — which is circular (flagged in report).
+
+    Note: **ingest snapshots** (``--dump-ingest``) contain raw messages
+    *before* evidence splitting — they have no ``evidence_id`` fields.
+    Use them with ``--replay-ingest``, not with ``eval-prompt``.
     """
     ids: Set[str] = set()
 
-    # Format 1: LLM replay snapshot — extract from recorded responses
+    # Format 1: explicit list
+    explicit = snapshot.get("evidence_ids", [])
+    if explicit:
+        return set(explicit)
+
+    # Format 2: flat chunk list
+    for chunk in snapshot.get("chunks", []):
+        eid = chunk.get("evidence_id")
+        if eid:
+            ids.add(eid)
+    if ids:
+        return ids
+
+    # Format 3: LLM replay — try to extract from recorded input messages
+    for response in snapshot.get("responses", []):
+        # Prefer input messages (if recorded)
+        for msg in response.get("messages", []):
+            content = msg.get("content", "")
+            ids.update(_parse_evidence_ids_from_text(content))
+
+    if ids:
+        return ids
+
+    # Last resort: extract from LLM output (circular — but better than nothing)
     for response in snapshot.get("responses", []):
         data = response.get("data", {})
         for section in data.get("sections", []):
@@ -428,17 +483,16 @@ def _extract_evidence_ids(snapshot: Dict[str, Any]) -> Set[str]:
                 if eid:
                     ids.add(eid)
 
-    # Format 2: ingest snapshot — evidence IDs are top-level keys or in chunks
-    for msg in snapshot.get("messages", []):
-        for chunk in msg.get("chunks", []):
-            eid = chunk.get("evidence_id")
-            if eid:
-                ids.add(eid)
-
-    # Format 3: flat list of chunks
-    for chunk in snapshot.get("chunks", []):
-        eid = chunk.get("evidence_id")
-        if eid:
-            ids.add(eid)
-
     return ids
+
+
+def _parse_evidence_ids_from_text(text: str) -> Set[str]:
+    """
+    Parse evidence IDs from the formatted evidence block text sent to the LLM.
+
+    The pipeline formats evidence as:
+        Evidence N (ID: ev-abc123, Msg: msg-xyz, Thread: conv-001)
+
+    Returns set of extracted IDs.
+    """
+    return set(re.findall(r"\bID:\s*(ev-[a-f0-9-]+)", text))

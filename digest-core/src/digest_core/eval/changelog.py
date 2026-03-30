@@ -49,12 +49,26 @@ _CHANGELOG_END = re.compile(r"^#\s*END_CHANGELOG\s*$", re.MULTILINE | re.IGNOREC
 
 def parse_prompt_changelog(prompt_path: Path) -> List[PromptVersion]:
     """
-    Parse the CHANGELOG block from a prompt file.
+    Parse the CHANGELOG block from a prompt's companion ``.changelog`` file,
+    falling back to an inline ``# CHANGELOG`` block within the prompt itself.
 
-    Returns an empty list if no CHANGELOG block is found (backward compatible).
+    The companion file (e.g. ``extract_actions.v1.changelog``) is preferred
+    so that changelog metadata is never included in the text sent to the LLM.
+
+    Returns an empty list if no changelog is found (backward compatible).
     """
-    text = prompt_path.read_text(encoding="utf-8")
+    # Prefer companion .changelog file
+    changelog_path = prompt_path.with_suffix(".changelog")
+    if changelog_path.exists():
+        text = changelog_path.read_text(encoding="utf-8")
+    else:
+        text = prompt_path.read_text(encoding="utf-8")
 
+    return _parse_changelog_text(text)
+
+
+def _parse_changelog_text(text: str) -> List[PromptVersion]:
+    """Parse CHANGELOG entries from raw text."""
     start_m = _CHANGELOG_START.search(text)
     if not start_m:
         return []

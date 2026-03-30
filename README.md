@@ -39,6 +39,9 @@ python -m digest_core.cli run --dry-run
 python -m digest_core.cli run
 ```
 
+### Mattermost интеграция (важно)
+ActionPulse использует **incoming webhook** Mattermost для **доставки** готового дайджеста (Stage 8). Для чтения сообщений/DM пассивно собирать данные не требуется — в MVP не используется API/WebSocket “для чтения”.
+
 Подробнее — в [`digest-core/CLAUDE.md`](digest-core/CLAUDE.md).
 
 ---

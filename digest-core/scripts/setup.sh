@@ -49,6 +49,8 @@ LOG_LEVEL=""
 PAGE_SIZE=""
 COST_LIMIT=""
 SYNC_STATE_PATH=""
+MM_WEBHOOK_URL=""
+DELIVER_MATTERMOST_ENABLED="false"
 
 # Helper functions
 print_success() {
@@ -572,6 +574,28 @@ collect_observability_config() {
     prompt_choice "Select log level:" "DEBUG INFO WARNING ERROR" "INFO" "LOG_LEVEL"
 }
 
+collect_mattermost_config() {
+    print_step "Mattermost Delivery (Optional)"
+
+    while true; do
+        prompt_with_default "Mattermost incoming webhook URL (MM_WEBHOOK_URL). Leave empty to disable Mattermost delivery" "" "MM_WEBHOOK_URL"
+
+        if [[ -z "$MM_WEBHOOK_URL" ]]; then
+            DELIVER_MATTERMOST_ENABLED="false"
+            print_info "Mattermost delivery disabled (MM_WEBHOOK_URL is empty)."
+            break
+        fi
+
+        if validate_https "$MM_WEBHOOK_URL"; then
+            DELIVER_MATTERMOST_ENABLED="true"
+            print_success "Mattermost delivery enabled."
+            break
+        else
+            print_error "Invalid Mattermost webhook URL: expected HTTPS URL."
+        fi
+    done
+}
+
 collect_advanced_config() {
     print_step "Advanced Configuration (Optional)"
     
@@ -669,6 +693,9 @@ EWS_ENDPOINT="$EWS_ENDPOINT"
 # LLM Configuration
 LLM_TOKEN="$LLM_TOKEN"
 LLM_ENDPOINT="$LLM_ENDPOINT"
+
+# Mattermost delivery
+MM_WEBHOOK_URL="$MM_WEBHOOK_URL"
 EOF
     
     print_success ".env file created: $env_file"
@@ -715,6 +742,13 @@ llm:
 observability:
   prometheus_port: $PROMETHEUS_PORT
   log_level: "$LOG_LEVEL"
+
+deliver:
+  mattermost:
+    enabled: $DELIVER_MATTERMOST_ENABLED
+    webhook_url_env: "MM_WEBHOOK_URL"
+    max_message_length: 16383
+    include_trace_footer: true
 EOF
     
     print_success "config.yaml created: $config_file"
@@ -747,7 +781,9 @@ show_summary() {
     echo "4. Запустить тестовый прогон:"
     echo "   cd digest-core"
     echo "   .venv/bin/python -m digest_core.cli run --dry-run"
-    echo "5. Запустить полный дайджест:"
+    echo "5. Проверить Mattermost webhook (опционально, если включено в установщике):"
+    echo "   cd digest-core && source .env && curl -s -X POST -H 'Content-Type: application/json' -d '{\"text\":\"ActionPulse webhook ping\"}' \"\$MM_WEBHOOK_URL\" > /dev/null"
+    echo "6. Запустить полный дайджест:"
     echo "   cd digest-core"
     echo "   .venv/bin/python -m digest_core.cli run"
     
@@ -817,6 +853,7 @@ main() {
     collect_llm_config
     collect_time_config
     collect_observability_config
+    collect_mattermost_config
     collect_advanced_config
     validate_connectivity
     generate_env_file

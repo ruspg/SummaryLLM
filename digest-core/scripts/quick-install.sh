@@ -50,66 +50,23 @@ fi
 
 cd ..
 
-# Create minimal .env template
-print_step "Creating Configuration Template"
-cat > .env.template << 'EOF'
-# ActionPulse Environment Variables
-# Copy this file to .env and fill in your values
-
-# EWS Configuration
-EWS_PASSWORD="your_ews_password"
-EWS_USER_UPN="user@corp.com"
-EWS_ENDPOINT="https://ews.corp.com/EWS/Exchange.asmx"
-
-# LLM Configuration
-LLM_TOKEN="your_llm_token"
-LLM_ENDPOINT="https://llm-gw.corp.com/api/v1/chat"
-EOF
-
-# Create minimal config template
-mkdir -p digest-core/configs
-cat > digest-core/configs/config.template.yaml << 'EOF'
-# ActionPulse Configuration Template
-# Copy this file to config.yaml and customize
-
-time:
-  user_timezone: "Europe/Moscow"
-  window: "calendar_day"
-
-ews:
-  endpoint: "${EWS_ENDPOINT}"
-  user_upn: "${EWS_USER_UPN}"
-  password_env: "EWS_PASSWORD"
-  verify_ca: ""
-  autodiscover: false
-  folders: ["Inbox"]
-  lookback_hours: 24
-  page_size: 100
-  sync_state_path: ".state/ews.syncstate"
-
-llm:
-  endpoint: "${LLM_ENDPOINT}"
-  model: "corp/Qwen/Qwen3-30B-A3B-Instruct-2507"
-  timeout_s: 45
-  headers:
-    Authorization: "Bearer ${LLM_TOKEN}"
-  max_tokens_per_run: 30000
-  cost_limit_per_run: 5.0
-
-observability:
-  prometheus_port: 9108
-  log_level: "INFO"
-EOF
+# Create working .env and config.yaml from the repo examples
+print_step "Creating .env and config.yaml"
+cp digest-core/.env.example digest-core/.env
+cp digest-core/configs/config.example.yaml digest-core/configs/config.yaml
 
 print_success "Quick installation complete!"
 
 echo
 print_header "Next Steps:"
 echo "1. cd $INSTALL_DIR"
-echo "2. cp .env.template .env"
-echo "3. cp digest-core/configs/config.template.yaml digest-core/configs/config.yaml"
-echo "4. Edit .env and config.yaml with your settings"
-echo "5. cd digest-core && python -m digest_core.cli run --dry-run"
+echo "2. Edit digest-core/.env and digest-core/configs/config.yaml (EWS_PASSWORD, LLM_TOKEN, MM_WEBHOOK_URL)"
+echo "3. cd digest-core"
+echo "4. Activate venv (if created) and run dry-run:"
+echo "   source .venv/bin/activate 2>/dev/null || true"
+echo "   python -m digest_core.cli run --dry-run"
+echo "5. Optional: verify Mattermost webhook connectivity (sends one test message):"
+echo "   source .env && curl -s -X POST -H 'Content-Type: application/json' -d '{\"text\":\"ActionPulse webhook ping\"}' \"\$MM_WEBHOOK_URL\" > /dev/null"
 echo
 print_info "For interactive setup, run: ./setup.sh"
 print_info "For full documentation, see: README.md"

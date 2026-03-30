@@ -578,9 +578,16 @@ class Config(BaseSettings):
         return configs
 
     def _apply_yaml_config(self, yaml_config: Dict) -> None:
-        """Apply YAML configuration to current config."""
+        """Apply YAML configuration to current config.
+
+        Every section now carries an ``env_prefix`` so that any field can be
+        overridden via ``DIGEST_<PREFIX>_<FIELD>`` environment variables
+        (e.g. ``DIGEST_LLM_TIMEOUT_S=300``).  Explicit ``env_field_map``
+        entries are kept for backward-compatibility with the original
+        ``EWS_ENDPOINT`` / ``LLM_ENDPOINT`` names.
+        """
         if "time" in yaml_config:
-            self._merge_model(self.time, yaml_config["time"])
+            self._merge_model(self.time, yaml_config["time"], env_prefix="TIME")
         if "ews" in yaml_config:
             self._merge_model(
                 self.ews,
@@ -591,53 +598,97 @@ class Config(BaseSettings):
                     "user_login": "EWS_USER_LOGIN",
                     "user_domain": "EWS_USER_DOMAIN",
                 },
+                env_prefix="EWS",
             )
         if "llm" in yaml_config:
             self._merge_model(
                 self.llm,
                 yaml_config["llm"],
                 env_field_map={"endpoint": "LLM_ENDPOINT"},
+                env_prefix="LLM",
             )
         if "deliver" in yaml_config:
             mattermost_config = yaml_config["deliver"].get("mattermost", {})
-            self._merge_model(self.deliver.mattermost, mattermost_config)
+            self._merge_model(
+                self.deliver.mattermost, mattermost_config, env_prefix="MM"
+            )
         if "observability" in yaml_config:
-            self._merge_model(self.observability, yaml_config["observability"])
+            self._merge_model(
+                self.observability, yaml_config["observability"], env_prefix="OBS"
+            )
         if "selection_buckets" in yaml_config:
-            self._merge_model(self.selection_buckets, yaml_config["selection_buckets"])
+            self._merge_model(
+                self.selection_buckets,
+                yaml_config["selection_buckets"],
+                env_prefix="SEL_BUCKETS",
+            )
         if "selection_weights" in yaml_config:
-            self._merge_model(self.selection_weights, yaml_config["selection_weights"])
+            self._merge_model(
+                self.selection_weights,
+                yaml_config["selection_weights"],
+                env_prefix="SEL_WEIGHTS",
+            )
         if "context_budget" in yaml_config:
-            self._merge_model(self.context_budget, yaml_config["context_budget"])
+            self._merge_model(
+                self.context_budget,
+                yaml_config["context_budget"],
+                env_prefix="CTX_BUDGET",
+            )
         if "chunking" in yaml_config:
-            self._merge_model(self.chunking, yaml_config["chunking"])
+            self._merge_model(
+                self.chunking, yaml_config["chunking"], env_prefix="CHUNKING"
+            )
         if "shrink" in yaml_config:
-            self._merge_model(self.shrink, yaml_config["shrink"])
+            self._merge_model(self.shrink, yaml_config["shrink"], env_prefix="SHRINK")
         if "hierarchical" in yaml_config:
-            self._merge_model(self.hierarchical, yaml_config["hierarchical"])
+            self._merge_model(
+                self.hierarchical,
+                yaml_config["hierarchical"],
+                env_prefix="HIERARCHICAL",
+            )
         if "email_cleaner" in yaml_config:
-            self._merge_model(self.email_cleaner, yaml_config["email_cleaner"])
+            self._merge_model(
+                self.email_cleaner,
+                yaml_config["email_cleaner"],
+                env_prefix="EMAIL_CLEANER",
+            )
         if "nlp" in yaml_config:
-            self._merge_model(self.nlp, yaml_config["nlp"])
+            self._merge_model(self.nlp, yaml_config["nlp"], env_prefix="NLP")
         if "ranker" in yaml_config:
-            self._merge_model(self.ranker, yaml_config["ranker"])
+            self._merge_model(self.ranker, yaml_config["ranker"], env_prefix="RANKER")
         if "degrade" in yaml_config:
-            self._merge_model(self.degrade, yaml_config["degrade"])
+            self._merge_model(
+                self.degrade, yaml_config["degrade"], env_prefix="DEGRADE"
+            )
 
     def _merge_model(
         self,
         model: BaseModel,
         values: Dict,
         env_field_map: Optional[Dict[str, str]] = None,
+        env_prefix: Optional[str] = None,
     ) -> None:
-        """Merge YAML values into an existing model while preserving ENV precedence."""
+        """Merge YAML values into an existing model while preserving ENV precedence.
+
+        ENV override is checked in this order for each field:
+        1. Explicit ``env_field_map`` entry (e.g. ``{"endpoint": "EWS_ENDPOINT"}``).
+        2. Generic ``DIGEST_{env_prefix}_{FIELD}`` when *env_prefix* is given.
+        If the corresponding ENV variable is set (non-empty), the YAML value is
+        skipped so that the operator's ENV always wins.
+        """
         env_field_map = env_field_map or {}
         for key, value in values.items():
             if not hasattr(model, key):
                 continue
+            # Check explicit mapping first
             env_var = env_field_map.get(key)
             if env_var and os.getenv(env_var):
                 continue
+            # Check generic prefix-based mapping
+            if env_prefix and not env_var:
+                generic_env = f"DIGEST_{env_prefix}_{key}".upper()
+                if os.getenv(generic_env):
+                    continue
             setattr(model, key, value)
 
     def get_ews_password(self) -> str:

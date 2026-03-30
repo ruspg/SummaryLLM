@@ -4,7 +4,16 @@ Test configuration classes and methods.
 import pytest
 import os
 from unittest.mock import patch, Mock
-from digest_core.config import EWSConfig, Config, LLMConfig, TimeConfig, ObservabilityConfig
+from pydantic import BaseModel, Field
+from digest_core.config import (
+    EWSConfig,
+    Config,
+    LLMConfig,
+    TimeConfig,
+    ObservabilityConfig,
+    MattermostDeliverConfig,
+    DegradeConfig,
+)
 
 
 class TestEWSConfig:
@@ -107,9 +116,120 @@ class TestObservabilityConfig:
         assert config.log_level == "INFO"
 
 
+class TestEnvOverYamlPrecedence:
+    """Verify that ENV variables override YAML values via _merge_model."""
+
+    def test_explicit_env_field_map_wins(self):
+        """Explicit env_field_map entries (e.g. EWS_ENDPOINT) override YAML."""
+        with patch.dict(os.environ, {"EWS_ENDPOINT": "https://env-wins"}, clear=False):
+            config = Config()
+            config._merge_model(
+                config.ews,
+                {"endpoint": "https://yaml-value"},
+                env_field_map={"endpoint": "EWS_ENDPOINT"},
+            )
+            assert config.ews.endpoint == "https://env-wins"
+
+    def test_generic_env_prefix_wins_for_llm(self):
+        """DIGEST_LLM_TIMEOUT_S overrides YAML timeout_s."""
+        with patch.dict(os.environ, {"DIGEST_LLM_TIMEOUT_S": "300"}, clear=False):
+            config = Config()
+            config._merge_model(
+                config.llm,
+                {"timeout_s": 45},
+                env_prefix="LLM",
+            )
+            # ENV was set, so YAML should NOT overwrite
+            assert config.llm.timeout_s != 45
+
+    def test_generic_env_prefix_wins_for_time(self):
+        """DIGEST_TIME_WINDOW overrides YAML window."""
+        with patch.dict(os.environ, {"DIGEST_TIME_WINDOW": "rolling_24h"}, clear=False):
+            config = Config()
+            # Try to overwrite with a distinct YAML value
+            config._merge_model(
+                config.time,
+                {"window": "some_other_mode"},
+                env_prefix="TIME",
+            )
+            # ENV blocks YAML — value should NOT be "some_other_mode"
+            assert config.time.window != "some_other_mode"
+
+    def test_generic_env_prefix_wins_for_degrade(self):
+        """DIGEST_DEGRADE_ENABLE overrides YAML degrade.enable."""
+        with patch.dict(os.environ, {"DIGEST_DEGRADE_ENABLE": "false"}, clear=False):
+            config = Config()
+            # Set a known baseline
+            config.degrade.enable = False
+            # Try to overwrite via YAML
+            config._merge_model(
+                config.degrade,
+                {"enable": True},
+                env_prefix="DEGRADE",
+            )
+            # ENV blocks YAML — value should stay False
+            assert config.degrade.enable is False
+
+    def test_generic_env_prefix_wins_for_mm(self):
+        """DIGEST_MM_ENABLED overrides YAML deliver.mattermost.enabled."""
+        with patch.dict(os.environ, {"DIGEST_MM_ENABLED": "false"}, clear=False):
+            config = Config()
+            # Set a known baseline
+            config.deliver.mattermost.enabled = False
+            # Try to overwrite via YAML
+            config._merge_model(
+                config.deliver.mattermost,
+                {"enabled": True},
+                env_prefix="MM",
+            )
+            # ENV blocks YAML — value should stay False
+            assert config.deliver.mattermost.enabled is False
+
+    def test_generic_env_prefix_wins_for_observability(self):
+        """DIGEST_OBS_LOG_LEVEL overrides YAML log_level."""
+        with patch.dict(os.environ, {"DIGEST_OBS_LOG_LEVEL": "DEBUG"}, clear=False):
+            config = Config()
+            config._merge_model(
+                config.observability,
+                {"log_level": "ERROR"},
+                env_prefix="OBS",
+            )
+            assert config.observability.log_level != "ERROR"
+
+    def test_yaml_applies_when_no_env_set(self):
+        """Without ENV, YAML values are applied normally."""
+        env_keys = ["DIGEST_LLM_TIMEOUT_S", "LLM_ENDPOINT"]
+        with patch.dict(os.environ, {k: "" for k in env_keys}, clear=False):
+            config = Config()
+            original = config.llm.timeout_s
+            config._merge_model(
+                config.llm,
+                {"timeout_s": 999},
+                env_prefix="LLM",
+            )
+            assert config.llm.timeout_s == 999
+
+    def test_explicit_map_takes_priority_over_generic_prefix(self):
+        """If both explicit env_field_map and env_prefix match, explicit wins."""
+        with patch.dict(
+            os.environ,
+            {"EWS_ENDPOINT": "explicit", "DIGEST_EWS_ENDPOINT": "generic"},
+            clear=False,
+        ):
+            config = Config()
+            config._merge_model(
+                config.ews,
+                {"endpoint": "yaml"},
+                env_field_map={"endpoint": "EWS_ENDPOINT"},
+                env_prefix="EWS",
+            )
+            # Explicit match skips before generic check
+            assert config.ews.endpoint != "yaml"
+
+
 class TestConfigIntegration:
     """Integration tests for Config class."""
-    
+
     def test_ews_config_access_chain(self):
         """Test the correct access chain: Config.get_ews_password() -> EWSConfig.get_password()."""
         with patch.dict(os.environ, {'EWS_PASSWORD': 'integration_test_password'}):

@@ -50,6 +50,8 @@ def run_digest(
     force: bool = False,
     dump_ingest: str | None = None,
     replay_ingest: str | None = None,
+    record_llm: str | None = None,
+    replay_llm: str | None = None,
 ) -> bool:
     """Run the complete digest pipeline."""
     return _run_pipeline(
@@ -64,6 +66,8 @@ def run_digest(
         force=force,
         dump_ingest=dump_ingest,
         replay_ingest=replay_ingest,
+        record_llm=record_llm,
+        replay_llm=replay_llm,
     )
 
 
@@ -78,6 +82,8 @@ def run_digest_dry_run(
     force: bool = False,
     dump_ingest: str | None = None,
     replay_ingest: str | None = None,
+    record_llm: str | None = None,
+    replay_llm: str | None = None,
 ) -> None:
     """Run the pipeline up to context selection without LLM or delivery."""
     _run_pipeline(
@@ -92,6 +98,8 @@ def run_digest_dry_run(
         force=force,
         dump_ingest=dump_ingest,
         replay_ingest=replay_ingest,
+        record_llm=record_llm,
+        replay_llm=replay_llm,
     )
 
 
@@ -108,6 +116,8 @@ def _run_pipeline(
     force: bool,
     dump_ingest: str | None,
     replay_ingest: str | None,
+    record_llm: str | None = None,
+    replay_llm: str | None = None,
 ) -> bool:
     """Run the digest pipeline with shared setup for normal and dry-run modes."""
     trace_id = str(uuid.uuid4())
@@ -277,7 +287,12 @@ def _run_pipeline(
             )
             return True
 
-        llm_gateway = LLMGateway(config.llm, metrics=metrics)
+        llm_gateway = LLMGateway(
+            config.llm,
+            metrics=metrics,
+            record_llm=record_llm,
+            replay_llm=replay_llm,
+        )
         llm_stage_start = time.perf_counter()
 
         if not selected_evidence:

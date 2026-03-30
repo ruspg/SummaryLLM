@@ -39,6 +39,12 @@ def run(
         "--replay-ingest",
         help="Replay a normalized ingest snapshot instead of EWS",
     ),
+    record_llm: str = typer.Option(
+        None, "--record-llm", help="Record LLM responses to JSON file"
+    ),
+    replay_llm: str = typer.Option(
+        None, "--replay-llm", help="Replay LLM responses from a recorded JSON file"
+    ),
     validate_citations: bool = typer.Option(
         False,
         "--validate-citations",
@@ -70,6 +76,8 @@ def run(
                 force=force,
                 dump_ingest=dump_ingest,
                 replay_ingest=replay_ingest,
+                record_llm=record_llm,
+                replay_llm=replay_llm,
             )
             exit_code = 2  # Partial success code
         else:
@@ -84,6 +92,8 @@ def run(
                 force=force,
                 dump_ingest=dump_ingest,
                 replay_ingest=replay_ingest,
+                record_llm=record_llm,
+                replay_llm=replay_llm,
             )
 
             # Exit with code 2 if citation validation failed

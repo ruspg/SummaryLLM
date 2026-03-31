@@ -171,7 +171,13 @@ def diagnose():
             typer.echo("")
             typer.echo(_build_env_info())
             typer.echo("Required ENV vars:")
-            for var in ("EWS_USER_UPN", "EWS_PASSWORD", "LLM_TOKEN", "EWS_ENDPOINT", "LLM_ENDPOINT"):
+            for var in (
+                "EWS_USER_UPN",
+                "EWS_PASSWORD",
+                "LLM_TOKEN",
+                "EWS_ENDPOINT",
+                "LLM_ENDPOINT",
+            ):
                 value = os.environ.get(var)
                 status = f"set ({len(value)} chars)" if value else "NOT SET"
                 mark = "✓" if value else "✗"
@@ -183,7 +189,9 @@ def diagnose():
                 mark = "✓" if path else "✗"
                 typer.echo(f"  {mark} {tool}: {path or 'not found'}")
             typer.echo("")
-            typer.echo("Note: full shell-based diagnostics require a git checkout (digest-core/scripts/).")
+            typer.echo(
+                "Note: full shell-based diagnostics require a git checkout (digest-core/scripts/)."
+            )
 
         typer.echo("✓ Diagnostics completed")
 

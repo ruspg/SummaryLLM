@@ -285,14 +285,20 @@ budget enforcement будет ослаблен — Stage 5 нужно дораб
 }
 ```
 
-**Retry policy:**
-- JSON parse error: 1 retry after 4s wait _(respect rate limit)_
-  Adds "IMPORTANT: Return strict JSON" hint to system prompt
-- Quality retry: if empty sections but evidence has positive signals
-  (priority_score ≥ 1.5) → 1 retry with quality hint, 4s wait
+**Retry policy (two levels):**
+
+_Internal retries (within `_make_request_with_retry`, `stop_after_attempt(2)`)_:
 - HTTP 429 (rate limit): wait `Retry-After` header or 60s, then 1 retry
 - HTTP 5xx: 1 retry after 5s
-- **Max 2 total LLM calls per pipeline run** (original + 1 retry)
+- JSON parse error: 1 retry after 4s, adds "Return strict JSON" hint
+
+_Quality retry (in `extract_actions`, on top of internal retries)_:
+- If empty sections but evidence has positive signals (priority_score ≥ 1.5)
+  → 1 additional call with quality hint, 4s rate-limit wait
+
+**Max LLM HTTP calls per pipeline run:** 2 logical calls (1 primary + 1 quality retry),
+each with up to 1 internal retry for transient errors = max 4 HTTP requests worst case.
+Typical run: 1 HTTP call.
 
 **Response validation:**
 - Each item must have: title, evidence_id, confidence, source_ref
@@ -620,14 +626,27 @@ run_digest("2026-03-29", ...)
 
 ## 9. Prompt Strategy & Section Taxonomy
 
-### 9.1 Current State
+### 9.1 Prompt File Inventory
 
-| Prompt File | Language | Used In | Status |
-|-------------|----------|---------|--------|
-| `extract_actions.v1.txt` | RU | `run.py` / pipeline (plain text, ADR-009) | Active, итерации качества по мере dogfooding |
-| `extract_actions.en.v1.txt` | EN | Тот же путь при выборе EN-шаблона | Active |
-| `thread_summarize/v1/default.j2` | RU/EN | Иерархический режим через `prompt_registry` | Active (Jinja2 только здесь) |
-| `summarize*.j2` | — | Удалены | Был мёртвый код (MD собирается из JSON) |
+| File | Format | Stage | Used in `run.py`? | Status |
+|------|--------|-------|-------------------|--------|
+| `prompts/extract_actions.v1.txt` | Plain text | 6 (LLM) | **Yes** — default RU prompt | Active |
+| `prompts/extract_actions.en.v1.txt` | Plain text | 6 (LLM) | **Yes** — EN variant for qwen models | Active |
+| `prompts/extract_actions.v1.changelog` | Text | — | No (documentation only) | Reference |
+| `prompts/thread_summarize/v1/default.j2` | Jinja2 | 6 (LLM) | **No** — `hierarchical/processor.py` only | Active (experimental) |
+
+**Dead entries in `prompt_registry.py`** (files do not exist on disk):
+
+| Registry key | Mapped path | Status |
+|-------------|-------------|--------|
+| `summarize.mvp.5` / `summarize.mvp5` | `summarize/mvp/v5/default.j2` | Dead — file removed |
+| `summarize.v2` / `summarize.v2_hierarchical` | `summarize/v2/default.j2` | Dead — file removed |
+| `summarize.v1` | `summarize/v1/default.j2` | Dead — file removed |
+| `summarize.en.v1` | `summarize/v1/en.j2` | Dead — file removed |
+
+**Loading mechanism:** `run.py` calls `get_prompt_template_path()` from `prompt_registry.py`,
+then reads the file via `Path.read_text()`. Jinja2 rendering is NOT used for extraction prompts (ADR-009);
+only `thread_summarize` in the hierarchical processor uses Jinja2.
 
 ### 9.2 Prompt Design Decisions
 
@@ -808,10 +827,11 @@ digest-core/
 - **Rationale:** Deterministic, testable, cheaper, no hallucination risk
 - **Consequence:** `summarize.v1.j2` is dead code → remove
 
-### ADR-002: Single LLM call per run
-- **Decision:** One extraction call, not multi-step (extract → summarize → format)
+### ADR-002: Single-step LLM extraction (no multi-step pipeline)
+- **Decision:** One extraction call, not multi-step (extract → summarize → format).
+  Quality retry (max +1 call) is allowed within the same step — see ADR-008.
 - **Rationale:** Latency, cost, complexity. One 2000-token response is sufficient
-- **Consequence:** Prompt must be high-quality to compensate for single-shot
+- **Consequence:** Prompt must be high-quality to compensate for single-step
 
 ### ADR-003: Rule-based context selection (not embeddings)
 - **Decision:** Keyword scoring + filtering, no vector embeddings

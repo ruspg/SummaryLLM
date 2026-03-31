@@ -1,4 +1,4 @@
-.PHONY: setup setup-wizard test lint run docker clean package ci scripts
+.PHONY: setup setup-wizard test lint format run docker docker-run package ci smoke test-run diagnose collect-logs deploy rotate env-check clean
 
 setup:
 	@echo "Installing dependencies with uv..."
@@ -14,14 +14,15 @@ setup-wizard:
 	@cd .. && ./digest-core/scripts/setup.sh
 
 test:
-	./scripts/test.sh
+	PYTHONPATH=src uv run pytest tests/ -v
 
 lint:
-	./scripts/lint.sh
+	uv run ruff check src/ tests/
+	uv run black --check src/ tests/
 
 format:
-	ruff check --fix src/ tests/
-	black src/ tests/
+	uv run ruff check --fix src/ tests/
+	uv run black src/ tests/
 
 run:
 	python -m digest_core.cli run --from-date today --sources ews --out ./out
@@ -40,19 +41,15 @@ docker-run:
 		digest-core:latest
 
 package:
-	./scripts/build.sh
+	uv build
 
 ci: lint test
 
-scripts:
-	@echo "Available scripts:"
-	@ls -la scripts/
-
 smoke:
-	./scripts/smoke.sh
+	python -m digest_core.cli run --dry-run --window calendar_day
 
 test-run:
-	./scripts/test_run.sh
+	python -m digest_core.cli run --dry-run --from-date today
 
 diagnose:
 	python -m digest_core.cli diagnose
@@ -73,4 +70,3 @@ clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name '*.pyc' -delete
 	rm -rf .pytest_cache .coverage htmlcov dist build *.egg-info
-

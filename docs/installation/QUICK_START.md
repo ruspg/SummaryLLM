@@ -8,10 +8,10 @@
 
 ```bash
 # Полная установка с интерактивной настройкой
-curl -fsSL https://raw.githubusercontent.com/ruspg/ActionPulse/main/digest-core/scripts/install_interactive.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ruspg/ActionPulse/main/digest-core/scripts/install.sh | bash
 
-# Быстрая установка без интерактивной настройки
-curl -fsSL https://raw.githubusercontent.com/ruspg/ActionPulse/main/digest-core/scripts/quick-install.sh | bash
+# Или: без интерактивной настройки (только клонирование + зависимости)
+curl -fsSL https://raw.githubusercontent.com/ruspg/ActionPulse/main/digest-core/scripts/install.sh | bash -s -- --skip-setup
 ```
 
 ### Что происходит при установке
@@ -40,7 +40,7 @@ cd digest-core && make setup-wizard
 
 ```bash
 cd ~/ActionPulse
-source .env
+set -a && source .env && set +a
 ```
 
 ### 2. Перейдите в директорию digest-core
@@ -86,7 +86,7 @@ python3.11 -m digest_core.cli run --from-date 2024-01-15
 python3.11 -m digest_core.cli run --dry-run
 
 # Другая модель LLM
-python3.11 -m digest_core.cli run --model "gpt-4"
+python3.11 -m digest_core.cli run --model "qwen35-397b-a17b"
 
 # Кастомная директория вывода
 python3.11 -m digest_core.cli run --out ./my-digests
@@ -131,7 +131,7 @@ ls -la digest-core/out/digest-*.md
 crontab -e
 
 # Добавить строку:
-0 8 * * * cd /path/to/ActionPulse/digest-core && source ../.env && python -m digest_core.cli run
+0 8 * * * cd /path/to/ActionPulse/digest-core && set -a && source ../.env && set +a && .venv/bin/python -m digest_core.cli run
 ```
 
 ### Использование systemd (Linux)

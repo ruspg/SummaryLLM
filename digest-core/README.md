@@ -56,13 +56,21 @@ digest-core/scripts/py.sh -m digest_core.cli run
 
 ## Quick Start
 
-The easiest way to get started is using the interactive setup script from the project root:
+### One-Command Install (new users)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ruspg/ActionPulse/main/digest-core/scripts/install.sh | bash
+```
+
+This clones the repo, installs dependencies, and runs the interactive setup wizard.
+
+### From existing clone
 
 ```bash
 # From ActionPulse root directory
 ./digest-core/scripts/setup.sh
 
-# Or using make
+# Or from digest-core/
 make setup-wizard
 ```
 
@@ -79,7 +87,7 @@ The setup script automatically creates a virtual environment in `.venv`.
 
 2. **Load environment variables**:
    ```bash
-   source ../.env
+   set -a && source ../.env && set +a
    ```
 
 3. **Check configuration**:
@@ -98,7 +106,7 @@ The setup script automatically creates a virtual environment in `.venv`.
 
 **Alternative**: Run without activating venv:
 ```bash
-source ../.env
+set -a && source ../.env && set +a
 .venv/bin/python -m digest_core.cli run --dry-run
 ```
 
@@ -128,9 +136,9 @@ make setup
 ## Deployment & Infrastructure
 
 For detailed deployment instructions, see:
-- **[DEPLOYMENT.md](../DEPLOYMENT.md)** - Docker setup, dedicated machine configuration, infrastructure requirements
-- **[AUTOMATION.md](../AUTOMATION.md)** - Scheduling with systemd/cron, state management, advanced automation
-- **[MONITORING.md](../MONITORING.md)** - Prometheus metrics, health checks, logging, observability
+- **[DEPLOYMENT.md](../docs/operations/DEPLOYMENT.md)** - Docker setup, dedicated machine configuration, infrastructure requirements
+- **[AUTOMATION.md](../docs/operations/AUTOMATION.md)** - Scheduling with systemd/cron, state management, advanced automation
+- **[MONITORING.md](../docs/operations/MONITORING.md)** - Prometheus metrics, health checks, logging, observability
 
 ## Troubleshooting Installation
 
@@ -245,7 +253,7 @@ make run
 python3.11 -m digest_core.cli run --window rolling_24h
 
 # Custom LLM model
-python3.11 -m digest_core.cli run --model "gpt-4"
+python3.11 -m digest_core.cli run --model "qwen35-397b-a17b"
 
 # Multiple sources (if implemented)
 python3.11 -m digest_core.cli run --sources "ews,mattermost"
@@ -262,7 +270,7 @@ python3.11 -m digest_core.cli run --verbose
 **Daily Automated Run:**
 ```bash
 # Add to crontab for daily 8 AM execution
-0 8 * * * cd /path/to/digest-core && source ../.env && python3.11 -m digest_core.cli run
+0 8 * * * cd /path/to/digest-core && set -a && source ../.env && set +a && .venv/bin/python -m digest_core.cli run
 ```
 
 **Historical Digest Generation:**
@@ -448,7 +456,7 @@ python -m digest_core.cli run --verbose
 
 ## Observability
 
-For detailed monitoring and observability setup, see **[MONITORING.md](../MONITORING.md)**.
+For detailed monitoring and observability setup, see **[MONITORING.md](../docs/operations/MONITORING.md)**.
 
 Quick diagnostics:
 ```bash
@@ -457,19 +465,6 @@ Quick diagnostics:
 
 # Or using make
 make env-check
-```
-
-## Troubleshooting
-
-For common issues and solutions, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
-
-Quick diagnostics:
-```bash
-# Check environment and configuration
-./digest-core/scripts/print_env.sh
-
-# Test dry-run mode
-python3 -m digest_core.cli --dry-run
 ```
 
 ## Development
@@ -502,7 +497,7 @@ EWS → normalize → thread → evidence split → context select
   → metrics + logs
 ```
 
-See `docs/ARCH.md` for detailed architecture documentation.
+See `docs/ARCHITECTURE.md` for detailed architecture documentation.
 
 ## Idempotency
 
@@ -523,7 +518,7 @@ To force rebuild, delete existing artifacts or use `--force` flag.
 
 - **[📚 Full Documentation](../docs/README.md)** - Complete documentation navigation
 - **[🚀 Quick Start](../docs/installation/QUICK_START.md)** - Get started in 5 minutes
-- **[🔧 Installation Guide](../docs/installation/INSTALL.md)** - Detailed installation instructions
+- **[🔧 Installation Guide](../docs/installation/QUICK_START.md)** - Installation instructions and quick start
 - **[🐳 Deployment](../docs/operations/DEPLOYMENT.md)** - Docker setup, dedicated machine configuration
 - **[⏰ Automation](../docs/operations/AUTOMATION.md)** - Scheduling with systemd/cron, state management
 - **[📊 Monitoring](../docs/operations/MONITORING.md)** - Prometheus metrics, health checks, observability

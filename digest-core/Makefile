@@ -11,7 +11,7 @@ setup:
 
 setup-wizard:
 	@echo "Running ActionPulse Interactive Setup..."
-	@cd .. && ./setup.sh
+	@cd .. && ./digest-core/scripts/setup.sh
 
 test:
 	./scripts/test.sh

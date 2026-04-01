@@ -1,4 +1,4 @@
-.PHONY: setup setup-wizard test lint format run docker docker-run package ci smoke test-run diagnose collect-logs deploy rotate env-check clean
+.PHONY: setup test lint format run docker docker-run package ci smoke diagnose env-check clean
 
 setup:
 	@echo "Installing dependencies with uv..."
@@ -8,10 +8,6 @@ setup:
 		echo "⚠ Native TLS failed, trying standard sync..."; \
 		uv sync; \
 	fi
-
-setup-wizard:
-	@echo "Running ActionPulse Interactive Setup..."
-	@cd .. && ./digest-core/scripts/setup.sh
 
 test:
 	PYTHONPATH=src uv run pytest tests/ -v
@@ -48,20 +44,8 @@ ci: lint test
 smoke:
 	python -m digest_core.cli run --dry-run --window calendar_day
 
-test-run:
-	python -m digest_core.cli run --dry-run --from-date today
-
 diagnose:
 	python -m digest_core.cli diagnose
-
-collect-logs:
-	./scripts/collect_diagnostics.sh
-
-deploy:
-	./scripts/deploy.sh
-
-rotate:
-	./scripts/rotate_state.sh
 
 env-check:
 	./scripts/print_env.sh

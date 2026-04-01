@@ -6,21 +6,21 @@ time:
   fail_on_naive: true              # Fail if naive datetime is encountered
 
 ews:
-  endpoint: "https://owa.corp-domain.ru/EWS/Exchange.asmx"
-  user_upn: "login@corp-domain.ru"
-  user_login: "login"
-  user_domain: "corp-domain.ru"
+  endpoint: "https://owa.corp-domain.ru/EWS/Exchange.asmx"  # <-- CHANGE
+  user_upn: "login@corp-domain.ru"      # <-- CHANGE: your corp email
+  user_login: "login"                   # <-- CHANGE: your NTLM login
+  user_domain: "corp-domain.ru"         # <-- CHANGE: your domain
   password_env: "EWS_PASSWORD"
-  verify_ca: "/etc/ssl/corp-ca.pem"
+  verify_ca: "/etc/ssl/corp-ca.pem"     # <-- CHANGE or remove if not needed
   autodiscover: false
   folders: ["Inbox"]
   lookback_hours: 24
   page_size: 100
   sync_state_path: ".state/ews.syncstate"
-  user_aliases: ["Name", "Surname", "Name.Surname@corp-domain.ru", "login"]
+  user_aliases: ["Name", "Surname", "Name.Surname@corp-domain.ru", "login"]  # <-- CHANGE
 
 llm:
-  endpoint: "https://llm-gw.corp.com/api/v1/chat"
+  endpoint: "https://llm-gw.corp.com/api/v1/chat"             # <-- CHANGE
   model: "qwen35-397b-a17b"
   timeout_s: 120
   headers:

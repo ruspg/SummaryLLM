@@ -1,15 +1,21 @@
 """
 Main digest pipeline runner.
+
+The pipeline has 8 stages: INGEST → NORMALIZE → THREADS → EVIDENCE
+→ SELECT → LLM → ASSEMBLE → DELIVER.
+
+RunContext carries shared state between stages. Each _stage_* function
+is a self-contained unit that reads from / writes to the context.
 """
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 import time
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 import uuid
 
 import structlog
@@ -36,6 +42,39 @@ PROMPTS_DIR = PACKAGE_ROOT / "prompts"
 SECTION_ORDER = {"Мои действия": 0, "Срочное": 1, "К сведению": 2}
 
 logger = structlog.get_logger()
+
+
+# ---------------------------------------------------------------------------
+# RunContext: carries shared state between pipeline stages
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RunContext:
+    """Mutable context threaded through all pipeline stages."""
+
+    trace_id: str
+    config: Config
+    metrics: MetricsCollector
+    digest_date: str
+    output_dir: Path
+    json_path: Path
+    md_path: Path
+    metadata_path: Path
+    dry_run: bool
+    force: bool
+    validate_citations: bool
+    dump_ingest: str | None
+    replay_ingest: str | None
+    record_llm: str | None
+    replay_llm: str | None
+    log_file: Any = None
+    run_meta: Dict[str, Any] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Public API (unchanged signatures)
+# ---------------------------------------------------------------------------
 
 
 def run_digest(
@@ -102,10 +141,14 @@ def run_digest_dry_run(
     )
 
 
-def _run_pipeline(
+# ---------------------------------------------------------------------------
+# Pipeline stages
+# ---------------------------------------------------------------------------
+
+
+def _init_context(
     *,
     from_date: str,
-    sources: Sequence[str],
     out: str,
     model: str,
     window: str,
@@ -115,10 +158,10 @@ def _run_pipeline(
     force: bool,
     dump_ingest: str | None,
     replay_ingest: str | None,
-    record_llm: str | None = None,
-    replay_llm: str | None = None,
-) -> bool:
-    """Run the digest pipeline with shared setup for normal and dry-run modes."""
+    record_llm: str | None,
+    replay_llm: str | None,
+) -> RunContext:
+    """Build RunContext with resolved config, paths, and initial metadata."""
     trace_id = str(uuid.uuid4())
     log_file = setup_logging()
 
@@ -161,120 +204,308 @@ def _run_pipeline(
         "partial": False,
     }
 
-    if not force and _should_skip_existing_artifacts(json_path, md_path):
-        artifact_age_hours = _artifact_age_hours(json_path)
+    return RunContext(
+        trace_id=trace_id,
+        config=config,
+        metrics=metrics,
+        digest_date=digest_date,
+        output_dir=output_dir,
+        json_path=json_path,
+        md_path=md_path,
+        metadata_path=metadata_path,
+        dry_run=dry_run,
+        force=force,
+        validate_citations=validate_citations,
+        dump_ingest=dump_ingest,
+        replay_ingest=replay_ingest,
+        record_llm=record_llm,
+        replay_llm=replay_llm,
+        log_file=log_file,
+        run_meta=run_meta,
+    )
+
+
+def _stage_ingest(ctx: RunContext) -> List[NormalizedMessage]:
+    """Stage 1+2: INGEST (+ NORMALIZE for live mode).
+
+    Replay mode returns already-normalized messages.
+    Live mode fetches from EWS then normalizes.
+    Also handles --dump-ingest snapshot writing.
+    """
+    if ctx.replay_ingest:
+        replay_start = time.perf_counter()
+        messages = _load_ingest_snapshot(Path(ctx.replay_ingest).expanduser())
+        _record_stage_duration(ctx.run_meta, ctx.metrics, "ingest", replay_start)
+        ctx.run_meta["ews_fetch_stats"] = {
+            "source": "replay",
+            "message_count": len(messages),
+            "fetch_timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    else:
+        ingest_start = time.perf_counter()
+        ingest = EWSIngest(ctx.config.ews, time_config=ctx.config.time, metrics=ctx.metrics)
+        messages = ingest.fetch_messages(ctx.digest_date, ctx.config.time)
+        ctx.metrics.record_emails_total(len(messages), "fetched")
+        _record_stage_duration(ctx.run_meta, ctx.metrics, "ingest", ingest_start)
+        ctx.run_meta["ews_fetch_stats"] = {
+            "source": "ews",
+            "message_count": len(messages),
+            "fetch_timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        normalize_start = time.perf_counter()
+        messages = _normalize_messages(messages, ctx.config)
+        _record_stage_duration(ctx.run_meta, ctx.metrics, "normalize", normalize_start)
+
+    if ctx.dump_ingest:
+        snapshot_path = Path(ctx.dump_ingest).expanduser()
+        _dump_ingest_snapshot(snapshot_path, messages, ctx.digest_date)
+
+    return messages
+
+
+def _stage_threads(ctx: RunContext, messages: List[NormalizedMessage]) -> list:
+    """Stage 3: THREADS — group messages into conversation threads."""
+    threads_start = time.perf_counter()
+    thread_builder = ThreadBuilder()
+    threads = thread_builder.build_threads(messages)
+    _record_stage_duration(ctx.run_meta, ctx.metrics, "threads", threads_start)
+    return threads
+
+
+def _stage_evidence(ctx: RunContext, threads: list, total_emails: int) -> List[EvidenceChunk]:
+    """Stage 4: EVIDENCE — split threads into budget-constrained chunks."""
+    evidence_start = time.perf_counter()
+    evidence_splitter = EvidenceSplitter(
+        user_aliases=ctx.config.ews.user_aliases,
+        user_timezone=ctx.config.time.user_timezone,
+        context_budget_config=ctx.config.context_budget,
+        chunking_config=ctx.config.chunking,
+    )
+    evidence_chunks = evidence_splitter.split_evidence(
+        threads,
+        total_emails=total_emails,
+        total_threads=len(threads),
+    )
+    _record_stage_duration(ctx.run_meta, ctx.metrics, "evidence", evidence_start)
+    return evidence_chunks
+
+
+def _stage_select(
+    ctx: RunContext, evidence_chunks: List[EvidenceChunk]
+) -> tuple[List[EvidenceChunk], Dict[str, Any]]:
+    """Stage 5: SELECT — rank and filter evidence for the LLM context window."""
+    select_start = time.perf_counter()
+    context_selector = ContextSelector(
+        buckets_config=ctx.config.selection_buckets,
+        weights_config=ctx.config.selection_weights,
+        context_budget_config=ctx.config.context_budget,
+        shrink_config=ctx.config.shrink,
+    )
+    selected_evidence = context_selector.select_context(evidence_chunks)
+    selection_metrics = context_selector.get_metrics()
+    _record_stage_duration(ctx.run_meta, ctx.metrics, "select", select_start)
+    return selected_evidence, selection_metrics
+
+
+def _stage_llm(
+    ctx: RunContext, selected_evidence: List[EvidenceChunk]
+) -> tuple[Digest, Optional[Exception]]:
+    """Stage 6: LLM — extract actions from evidence via the LLM gateway.
+
+    Returns (digest, llm_error). On LLM failure, returns a partial digest
+    instead of raising.
+    """
+    llm_gateway = LLMGateway(
+        ctx.config.llm,
+        metrics=ctx.metrics,
+        record_llm=ctx.record_llm,
+        replay_llm=ctx.replay_llm,
+    )
+    llm_stage_start = time.perf_counter()
+
+    if not selected_evidence:
+        digest = _build_empty_digest(ctx.digest_date, ctx.trace_id, prompt_version="none")
+        llm_error = None
+    else:
+        prompt_version, prompt_text = _load_extract_prompt(ctx.config.llm.model)
+        try:
+            llm_response = llm_gateway.extract_actions(
+                evidence=selected_evidence,
+                prompt_template=prompt_text,
+                trace_id=ctx.trace_id,
+            )
+            digest = Digest(
+                schema_version="1.0",
+                prompt_version=prompt_version,
+                digest_date=ctx.digest_date,
+                trace_id=ctx.trace_id,
+                sections=_sort_sections(llm_response.get("sections", [])),
+            )
+            llm_error = None
+        except Exception as exc:
+            ctx.metrics.record_degradation("llm_failed")
+            ctx.run_meta["partial"] = True
+            ctx.run_meta["status"] = "partial"
+            digest = _build_partial_digest(
+                digest_date=ctx.digest_date,
+                trace_id=ctx.trace_id,
+                error_message=str(exc),
+            )
+            llm_error = exc
+            logger.warning(
+                "LLM stage failed after retries, writing partial digest",
+                trace_id=ctx.trace_id,
+                error=str(exc),
+            )
+
+    _record_stage_duration(ctx.run_meta, ctx.metrics, "llm", llm_stage_start)
+
+    # Record LLM trace metadata
+    llm_meta = llm_gateway.get_request_stats()
+    llm_trace = dict(getattr(llm_gateway, "last_request_meta", {}))
+    llm_trace.update(
+        {
+            "model": llm_meta.get("model"),
+            "latency_ms": llm_meta.get("last_latency_ms", 0),
+            "timeout_s": llm_meta.get("timeout_s"),
+        }
+    )
+    if llm_error is not None:
+        llm_trace["error"] = str(llm_error)
+    ctx.run_meta["llm_request_trace"] = llm_trace
+    try:
+        ctx.metrics.record_llm_latency(llm_meta.get("last_latency_ms", 0) or 0)
+        ctx.metrics.record_llm_tokens(
+            int(llm_trace.get("tokens_in", 0)), int(llm_trace.get("tokens_out", 0))
+        )
+    except Exception:
+        pass
+
+    return digest, llm_error
+
+
+def _stage_assemble(ctx: RunContext, digest: Digest) -> None:
+    """Stage 7: ASSEMBLE — write JSON and Markdown artifacts."""
+    assemble_start = time.perf_counter()
+    _write_json(ctx.json_path, digest.model_dump(exclude_none=True))
+    MarkdownAssembler().write_digest(digest, ctx.md_path)
+    _record_stage_duration(ctx.run_meta, ctx.metrics, "assemble", assemble_start)
+
+
+def _stage_deliver(ctx: RunContext, digest: Digest) -> Dict[str, Any]:
+    """Stage 8: DELIVER — send digest to Mattermost if enabled."""
+    delivery_receipt: Dict[str, Any] = {}
+    if ctx.config.deliver.mattermost.enabled:
+        deliver_start = time.perf_counter()
+        try:
+            delivery_receipt = MattermostDeliverer(ctx.config.deliver.mattermost).deliver_digest(
+                digest
+            )
+        except Exception as exc:
+            delivery_receipt = {"status": "warning", "error": str(exc)}
+            logger.warning("Mattermost delivery failed", trace_id=ctx.trace_id, error=str(exc))
+        _record_stage_duration(ctx.run_meta, ctx.metrics, "deliver", deliver_start)
+    return delivery_receipt
+
+
+# ---------------------------------------------------------------------------
+# Pipeline orchestrator
+# ---------------------------------------------------------------------------
+
+
+def _run_pipeline(
+    *,
+    from_date: str,
+    sources: Sequence[str],
+    out: str,
+    model: str,
+    window: str,
+    state: str | None,
+    validate_citations: bool,
+    dry_run: bool,
+    force: bool,
+    dump_ingest: str | None,
+    replay_ingest: str | None,
+    record_llm: str | None = None,
+    replay_llm: str | None = None,
+) -> bool:
+    """Run the digest pipeline with shared setup for normal and dry-run modes."""
+    ctx = _init_context(
+        from_date=from_date,
+        out=out,
+        model=model,
+        window=window,
+        state=state,
+        validate_citations=validate_citations,
+        dry_run=dry_run,
+        force=force,
+        dump_ingest=dump_ingest,
+        replay_ingest=replay_ingest,
+        record_llm=record_llm,
+        replay_llm=replay_llm,
+    )
+
+    if not ctx.force and _should_skip_existing_artifacts(ctx.json_path, ctx.md_path):
+        artifact_age_hours = _artifact_age_hours(ctx.json_path)
         logger.info(
             "Existing artifacts found within T-48h window, skipping rebuild",
-            digest_date=digest_date,
+            digest_date=ctx.digest_date,
             artifact_age_hours=artifact_age_hours,
-            trace_id=trace_id,
+            trace_id=ctx.trace_id,
         )
-        metrics.record_run_total("ok")
-        run_meta["status"] = "skipped"
-        run_meta["pipeline_metrics"] = {"artifact_age_hours": artifact_age_hours}
-        _write_json(metadata_path, run_meta)
+        ctx.metrics.record_run_total("ok")
+        ctx.run_meta["status"] = "skipped"
+        ctx.run_meta["pipeline_metrics"] = {"artifact_age_hours": artifact_age_hours}
+        _write_json(ctx.metadata_path, ctx.run_meta)
         return True
 
     logger.info(
         "Starting digest run",
-        trace_id=trace_id,
-        digest_date=digest_date,
-        dry_run=dry_run,
+        trace_id=ctx.trace_id,
+        digest_date=ctx.digest_date,
+        dry_run=ctx.dry_run,
         sources=list(sources),
-        replay_ingest=replay_ingest,
-        dump_ingest=dump_ingest,
-        force=force,
+        replay_ingest=ctx.replay_ingest,
+        dump_ingest=ctx.dump_ingest,
+        force=ctx.force,
     )
 
-    messages: List[NormalizedMessage]
-    normalized_messages: List[NormalizedMessage]
-    threads = []
-    evidence_chunks: List[EvidenceChunk] = []
-    selected_evidence: List[EvidenceChunk] = []
-
     try:
-        if replay_ingest:
-            replay_start = time.perf_counter()
-            normalized_messages = _load_ingest_snapshot(Path(replay_ingest).expanduser())
-            messages = normalized_messages
-            _record_stage_duration(run_meta, metrics, "ingest", replay_start)
-            run_meta["ews_fetch_stats"] = {
-                "source": "replay",
-                "message_count": len(normalized_messages),
-                "fetch_timestamp": datetime.now(timezone.utc).isoformat(),
-            }
-        else:
-            ingest_start = time.perf_counter()
-            ingest = EWSIngest(config.ews, time_config=config.time, metrics=metrics)
-            messages = ingest.fetch_messages(digest_date, config.time)
-            metrics.record_emails_total(len(messages), "fetched")
-            _record_stage_duration(run_meta, metrics, "ingest", ingest_start)
-            run_meta["ews_fetch_stats"] = {
-                "source": "ews",
-                "message_count": len(messages),
-                "fetch_timestamp": datetime.now(timezone.utc).isoformat(),
-            }
+        # Stages 1-2: INGEST + NORMALIZE
+        normalized_messages = _stage_ingest(ctx)
 
-            normalize_start = time.perf_counter()
-            normalized_messages = _normalize_messages(messages, config)
-            _record_stage_duration(run_meta, metrics, "normalize", normalize_start)
+        # Stage 3: THREADS
+        threads = _stage_threads(ctx, normalized_messages)
 
-        if dump_ingest:
-            snapshot_path = Path(dump_ingest).expanduser()
-            _dump_ingest_snapshot(snapshot_path, normalized_messages, digest_date)
+        # Stage 4: EVIDENCE
+        evidence_chunks = _stage_evidence(ctx, threads, total_emails=len(normalized_messages))
 
-        threads_start = time.perf_counter()
-        thread_builder = ThreadBuilder()
-        threads = thread_builder.build_threads(normalized_messages)
-        _record_stage_duration(run_meta, metrics, "threads", threads_start)
+        # Stage 5: SELECT
+        selected_evidence, selection_metrics = _stage_select(ctx, evidence_chunks)
 
-        evidence_start = time.perf_counter()
-        evidence_splitter = EvidenceSplitter(
-            user_aliases=config.ews.user_aliases,
-            user_timezone=config.time.user_timezone,
-            context_budget_config=config.context_budget,
-            chunking_config=config.chunking,
-        )
-        evidence_chunks = evidence_splitter.split_evidence(
-            threads,
-            total_emails=len(normalized_messages),
-            total_threads=len(threads),
-        )
-        _record_stage_duration(run_meta, metrics, "evidence", evidence_start)
-
-        select_start = time.perf_counter()
-        context_selector = ContextSelector(
-            buckets_config=config.selection_buckets,
-            weights_config=config.selection_weights,
-            context_budget_config=config.context_budget,
-            shrink_config=config.shrink,
-        )
-        selected_evidence = context_selector.select_context(evidence_chunks)
-        selection_metrics = context_selector.get_metrics()
-        _record_stage_duration(run_meta, metrics, "select", select_start)
-
-        run_meta["evidence_summary"] = _build_evidence_summary(
+        ctx.run_meta["evidence_summary"] = _build_evidence_summary(
             threads=threads,
             evidence_chunks=evidence_chunks,
             selected_evidence=selected_evidence,
             selection_metrics=selection_metrics,
         )
 
-        if dry_run:
-            metrics.record_run_total("ok")
-            metrics.record_digest_build_time()
-            run_meta["status"] = "dry_run"
-            run_meta["pipeline_metrics"] = {
+        if ctx.dry_run:
+            ctx.metrics.record_run_total("ok")
+            ctx.metrics.record_digest_build_time()
+            ctx.run_meta["status"] = "dry_run"
+            ctx.run_meta["pipeline_metrics"] = {
                 "emails_processed": len(normalized_messages),
                 "threads_created": len(threads),
                 "evidence_chunks": len(evidence_chunks),
                 "selected_evidence": len(selected_evidence),
             }
-            _write_json(metadata_path, run_meta)
+            _write_json(ctx.metadata_path, ctx.run_meta)
             logger.info(
                 "Digest dry-run completed successfully",
-                trace_id=trace_id,
-                digest_date=digest_date,
+                trace_id=ctx.trace_id,
+                digest_date=ctx.digest_date,
                 emails_processed=len(normalized_messages),
                 threads_created=len(threads),
                 evidence_chunks=len(evidence_chunks),
@@ -282,116 +513,48 @@ def _run_pipeline(
             )
             return True
 
-        llm_gateway = LLMGateway(
-            config.llm,
-            metrics=metrics,
-            record_llm=record_llm,
-            replay_llm=replay_llm,
-        )
-        llm_stage_start = time.perf_counter()
+        # Stage 6: LLM
+        digest, llm_error = _stage_llm(ctx, selected_evidence)
 
-        if not selected_evidence:
-            digest = _build_empty_digest(digest_date, trace_id, prompt_version="none")
-            llm_error = None
-        else:
-            prompt_version, prompt_text = _load_extract_prompt(config.llm.model)
-            try:
-                llm_response = llm_gateway.extract_actions(
-                    evidence=selected_evidence,
-                    prompt_template=prompt_text,
-                    trace_id=trace_id,
-                )
-                digest = Digest(
-                    schema_version="1.0",
-                    prompt_version=prompt_version,
-                    digest_date=digest_date,
-                    trace_id=trace_id,
-                    sections=_sort_sections(llm_response.get("sections", [])),
-                )
-                llm_error = None
-            except Exception as exc:
-                metrics.record_degradation("llm_failed")
-                run_meta["partial"] = True
-                run_meta["status"] = "partial"
-                digest = _build_partial_digest(
-                    digest_date=digest_date,
-                    trace_id=trace_id,
-                    error_message=str(exc),
-                )
-                llm_error = exc
-                logger.warning(
-                    "LLM stage failed after retries, writing partial digest",
-                    trace_id=trace_id,
-                    error=str(exc),
-                )
+        # Stage 7: ASSEMBLE
+        _stage_assemble(ctx, digest)
 
-        _record_stage_duration(run_meta, metrics, "llm", llm_stage_start)
+        # Stage 8: DELIVER
+        delivery_receipt = _stage_deliver(ctx, digest)
+        ctx.run_meta["delivery_receipt"] = delivery_receipt
 
-        llm_meta = llm_gateway.get_request_stats()
-        llm_trace = dict(getattr(llm_gateway, "last_request_meta", {}))
-        llm_trace.update(
-            {
-                "model": llm_meta.get("model"),
-                "latency_ms": llm_meta.get("last_latency_ms", 0),
-                "timeout_s": llm_meta.get("timeout_s"),
-            }
-        )
-        if llm_error is not None:
-            llm_trace["error"] = str(llm_error)
-        run_meta["llm_request_trace"] = llm_trace
-        try:
-            metrics.record_llm_latency(llm_meta.get("last_latency_ms", 0) or 0)
-            metrics.record_llm_tokens(
-                int(llm_trace.get("tokens_in", 0)), int(llm_trace.get("tokens_out", 0))
-            )
-        except Exception:
-            pass
-
-        assemble_start = time.perf_counter()
-        _write_json(json_path, digest.model_dump(exclude_none=True))
-        MarkdownAssembler().write_digest(digest, md_path)
-        _record_stage_duration(run_meta, metrics, "assemble", assemble_start)
-
-        delivery_receipt: Dict[str, Any] = {}
-        if config.deliver.mattermost.enabled:
-            deliver_start = time.perf_counter()
-            try:
-                delivery_receipt = MattermostDeliverer(config.deliver.mattermost).deliver_digest(
-                    digest
-                )
-            except Exception as exc:
-                delivery_receipt = {"status": "warning", "error": str(exc)}
-                logger.warning("Mattermost delivery failed", trace_id=trace_id, error=str(exc))
-            _record_stage_duration(run_meta, metrics, "deliver", deliver_start)
-        run_meta["delivery_receipt"] = delivery_receipt
-
-        metrics.record_run_total("ok")
-        metrics.record_digest_build_time()
-        run_meta["status"] = "ok" if not run_meta["partial"] else "partial"
-        run_meta["pipeline_metrics"] = {
+        ctx.metrics.record_run_total("ok")
+        ctx.metrics.record_digest_build_time()
+        ctx.run_meta["status"] = "ok" if not ctx.run_meta["partial"] else "partial"
+        ctx.run_meta["pipeline_metrics"] = {
             "total_items": _count_digest_items(digest),
             "emails_processed": len(normalized_messages),
             "threads_created": len(threads),
             "evidence_chunks": len(evidence_chunks),
             "selected_evidence": len(selected_evidence),
         }
-        _write_json(metadata_path, run_meta)
+        _write_json(ctx.metadata_path, ctx.run_meta)
 
         logger.info(
             "Digest run completed",
-            trace_id=trace_id,
-            digest_date=digest_date,
+            trace_id=ctx.trace_id,
+            digest_date=ctx.digest_date,
             total_items=_count_digest_items(digest),
-            partial=run_meta["partial"],
+            partial=ctx.run_meta["partial"],
         )
         return True
     except Exception as exc:
-        metrics.record_run_total("failed")
-        run_meta["status"] = "failed"
-        run_meta["error"] = str(exc)
-        _write_json(metadata_path, run_meta)
-        logger.error("Digest run failed", trace_id=trace_id, error=str(exc), exc_info=True)
+        ctx.metrics.record_run_total("failed")
+        ctx.run_meta["status"] = "failed"
+        ctx.run_meta["error"] = str(exc)
+        _write_json(ctx.metadata_path, ctx.run_meta)
+        logger.error("Digest run failed", trace_id=ctx.trace_id, error=str(exc), exc_info=True)
         raise
+
+
+# ---------------------------------------------------------------------------
+# Helpers (unchanged — preserving names for test compatibility)
+# ---------------------------------------------------------------------------
 
 
 def _resolve_digest_date(from_date: str) -> str:

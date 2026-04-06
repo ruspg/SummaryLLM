@@ -96,7 +96,7 @@ EWS Inbox
 │ 5.SELECT │──────────────────────────┐
 └──────────┘                          │
     │                                 ▼
-┌──────────┐   Digest (validated JSON) — max 1 LLM call (rate limit: 15 RPM)
+┌──────────┐   Digest (validated JSON) — max 2 LLM calls (1 primary + 1 quality retry, 15 RPM)
 │  6.LLM   │──────────────────────────┐
 └──────────┘                          │
     │                                 ▼
@@ -264,8 +264,8 @@ budget enforcement будет ослаблен — Stage 5 нужно дораб
 **Rate limit constraint: 15 RPM (requests per minute)**
 
 Это ключевое ограничение, определяющее архитектуру LLM-вызовов:
-- MVP: **1 LLM-вызов на run** (extraction). При 15 RPM — достаточно с запасом.
-- Quality retry: **+1 вызов** (итого max 2 per run). Всё ещё в пределах лимита.
+- **Max 2 LLM-вызова на run** (1 primary extraction + опциональный quality retry, см. ADR-008). Типичный run — 1 вызов.
+- При 15 RPM этого хватает с запасом для single-tenant MVP.
 - Batch of N users: при 15 RPM max ~15 пользователей/мин или ~900/час.
   Для single-tenant MVP — не блокер. Для multi-tenant (Phase 4+) — потребуется
   очередь с rate limiter.
@@ -311,7 +311,8 @@ Typical run: 1 HTTP call.
 
 **qwen35-397b-a17b specific notes:**
 - Prompt language: RU (default) or EN. qwen3.5 handles both well.
-  Keep `extract_actions.v1.j2` (RU) as primary, EN variant for fallback.
+  Default: `extract_actions.v1.txt` (RU). For models containing `qwen` in the name,
+  the loader auto-selects `extract_actions.en.v1.txt` (see `run.py:_load_extract_prompt`).
 - JSON mode: qwen3.5 reliably outputs structured JSON with clear schema
   instructions. Few-shot examples still recommended for edge cases.
 - Context window: sufficient for 3000-token evidence + system prompt.
@@ -660,7 +661,9 @@ This is the correct approach:
 - Lower LLM cost (one call, not two)
 - Easier to test (MD assembly is pure function)
 
-**Decision: `summarize.v1.j2` should be removed or moved to `archive/`.**
+**Status:** Старые `summarize*.j2` файлы удалены в Phase 0 (см. §13.1 TD-007 и §9.1
+"Dead entries in `prompt_registry.py`"). Исторические записи в registry оставлены
+как маркеры для отладки регрессий.
 
 ### 9.3 Section Taxonomy
 
@@ -871,12 +874,18 @@ digest-core/
 - **Revisit when:** Rate limit увеличен до ≥60 RPM или добавлен второй endpoint.
 
 ### ADR-009: Prompt template files are plain text (not Jinja2)
-- **Decision:** `extract_actions.v1.j2` загружается через `.read_text()`, не через
-  Jinja2 engine. Template variables (`{{ }}`) не используются в extraction prompt.
+- **Decision:** Extraction prompts (`extract_actions.v1.txt`, `extract_actions.en.v1.txt`)
+  загружаются через `Path.read_text()`, не через Jinja2 engine. Template variables
+  (`{{ }}`) не используются в extraction prompt.
 - **Rationale:** Extraction prompt — статический текст. Jinja2 adds unnecessary
-  dependency for no benefit. `summarize.v1.j2` использовал Jinja2, но он — dead code.
-- **Consequence:** Переименовать файлы `.j2` → `.txt` или `.prompt` (Phase 0).
-  Если в будущем нужен dynamic prompt — тогда подключить Jinja2.
+  dependency for no benefit. Старые `summarize*.j2` использовали Jinja2, но они — dead
+  code из довендорного multi-step pipeline и были удалены (см. §13.1 TD-007).
+- **Status:** Применено в Phase 0 (TD-010): файлы переименованы из `.j2` в `.txt`,
+  Jinja2 для extraction не используется. Если в будущем понадобится dynamic prompt
+  для extraction — тогда подключить Jinja2 явно.
+- **Note:** `prompts/thread_summarize/v1/default.j2` всё ещё `.j2` — это
+  экспериментальный hierarchical processor, который не вызывается из `run.py` и
+  использует свой собственный загрузчик с Jinja2. Не путать с extraction prompts.
 
 ### ADR-010: Mattermost DM as primary delivery channel (not Web UI)
 - **Decision:** Дайджест доставляется через MM incoming webhook в DM пользователю.

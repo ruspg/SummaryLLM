@@ -2,45 +2,43 @@
 
 ## Обзор
 
-После завершения тестирования ActionPulse вам нужно отправить результаты через корпоративную почту. Эта инструкция поможет правильно подготовить и отправить диагностическую информацию.
+После завершения тестирования ActionPulse вам нужно отправить результаты через корпоративную почту или Mattermost. Эта инструкция поможет правильно подготовить и отправить диагностическую информацию.
 
-> **📖 Это часть E2E тестирования:** Данная инструкция - Шаг 7 из **[End-to-End Testing Guide](../../../docs/testing/E2E_TESTING_GUIDE.md)**. Убедитесь, что выполнили предыдущие шаги.
+> **📖 Контекст:** Этот документ — финальный шаг ручного тестирования.
+> Чек-лист этапов см. в [`MANUAL_TESTING_CHECKLIST.md`](./MANUAL_TESTING_CHECKLIST.md).
+> Установка: корневой [`README.md`](../../README.md) (`make setup`).
 
 ## Чек-лист перед отправкой
 
 Прежде чем отправлять результаты, убедитесь:
 
-- [ ] Выполнены все шаги из [E2E Testing Guide](../../../docs/testing/E2E_TESTING_GUIDE.md)
+- [ ] Выполнены все шаги из [`MANUAL_TESTING_CHECKLIST.md`](./MANUAL_TESTING_CHECKLIST.md)
 - [ ] Архив диагностики создан успешно
 - [ ] Размер архива проверен (< 25 MB для email)
 - [ ] Просмотрели содержимое архива (нет секретных данных)
-- [ ] Заполнен шаблон отчета со всеми метриками
+- [ ] Заполнен шаблон отчёта со всеми метриками
 - [ ] Описаны все найденные проблемы (если есть)
 
 ## Шаг 1: Запуск тестирования
 
-### Автоматический запуск (рекомендуется)
 ```bash
 cd digest-core
-./digest-core/scripts/test_run.sh
+
+# 1. Smoke / dry-run (без LLM, без MM)
+make smoke
+
+# 2. Полный запуск (только из корп-сети)
+python -m digest_core.cli run
+
+# 3. Сбор диагностического архива (логи, метрики, конфиг без секретов)
+scripts/collect_diagnostics.sh
 ```
 
-Этот скрипт:
-- Запустит все необходимые тесты
-- Автоматически соберет диагностику
-- Создаст архив для отправки
-- Покажет путь к архиву
-
-### Ручной запуск
-Если нужно запустить тесты вручную:
+Удобная альтернатива для отправки прямо в Mattermost:
 
 ```bash
-# 1. Запуск тестов
-python3 -m digest_core.cli run --dry-run
-python3 -m digest_core.cli run --out ./out
-
-# 2. Сбор диагностики
-./digest-core/scripts/collect_diagnostics.sh
+# Найти trace_id последнего запуска и отправить архив диагностики через MM
+python -m digest_core.cli export-diagnostics --trace-id <id> --send-mm
 ```
 
 ## Шаг 2: Поиск архива диагностики
@@ -176,7 +174,7 @@ diagnostics-YYYY-MM-DD-HH-MM-SS/
 
 === РЕЗУЛЬТАТЫ ТЕСТИРОВАНИЯ ===
 
-✓ Установка: Успешно (автоматическая через install_interactive.sh)
+✓ Установка: Успешно (через `make setup` — интерактивный wizard)
 ✓ Конфигурация: Успешно
 ✓ Smoke-тесты (dry-run): Успешно
 ✓ Полный цикл: Успешно
@@ -326,8 +324,14 @@ cp /tmp/diagnostics-*.tar.gz /media/usb/
 
 ### Архив слишком большой (>25MB)
 ```bash
-# Создать архив без больших файлов
-./digest-core/scripts/collect_diagnostics.sh --exclude-large-files
+# Удалить старые логи перед сбором
+rm -f ~/.digest-logs/run-*.log
+
+# Затем повторно
+scripts/collect_diagnostics.sh
+
+# Альтернатива — отправить через Mattermost (нет лимита 25MB)
+python -m digest_core.cli export-diagnostics --trace-id <id> --send-mm
 ```
 
 ### Проблемы с доступом к почте
@@ -357,4 +361,4 @@ df -h /tmp/
 
 - [Чек-лист тестирования](./MANUAL_TESTING_CHECKLIST.md)
 - [Руководство по устранению неполадок](../troubleshooting/TROUBLESHOOTING.md)
-- [Документация по установке](../installation/INSTALL.md)
+- [Quick Start](../installation/QUICK_START.md) и корневой [`README.md`](../../README.md) — установка через `make setup`

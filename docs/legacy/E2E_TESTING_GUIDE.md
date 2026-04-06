@@ -1,5 +1,15 @@
 # End-to-End Testing Guide для ActionPulse
 
+> **🗄️ ARCHIVED 2026-04-06.** Этот документ ссылается на shell-скрипты
+> (`install_interactive.sh`, `doctor.sh`, `test_run.sh`), которые никогда
+> не существовали в репозитории. Сохранён для исторической справки.
+>
+> **Текущий путь тестирования:** `cd digest-core && make test` (mocked tests),
+> `make smoke` (dry-run), `python -m digest_core.cli diagnose` (диагностика),
+> `digest-core/scripts/collect_diagnostics.sh` (сбор архива).
+> Полная инструкция по setup — [`README.md`](../../README.md) и
+> [`digest-core/CLAUDE.md`](../../digest-core/CLAUDE.md).
+
 ## Введение
 
 Этот гайд предназначен для **тестировщиков**, которые устанавливают и тестируют ActionPulse на отдельном компьютере (в том числе корпоративном ноутбуке) для проверки работоспособности и возврата результатов разработчику.

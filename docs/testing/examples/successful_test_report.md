@@ -1,5 +1,14 @@
 # Пример успешного отчета о тестировании
 
+> **📌 Примечание (2026-04-06):** Этот пример был написан для раннего варианта
+> setup-инструментария и упоминает скрипты `install_interactive.sh`, `doctor.sh`,
+> которые в действительности **никогда не существовали в репозитории**. Шаблон
+> остаётся полезным как образец структуры отчёта, но при копировании заменяйте:
+> - `install_interactive.sh` → `make setup` (интерактивный wizard, см. корневой [`README.md`](../../../README.md))
+> - `doctor.sh` → `python -m digest_core.cli diagnose`
+> - `test_run.sh` → `python -m digest_core.cli run` или `make smoke` (для dry-run)
+> - `collect_diagnostics.sh` остаётся как есть (это реальный скрипт)
+
 ## Email шаблон
 
 **Тема:** `ActionPulse Test Results - 2024-10-13 - SUCCESS`

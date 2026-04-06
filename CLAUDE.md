@@ -17,7 +17,7 @@ Monorepo with one package. All development happens in `digest-core/`.
 - `digest-core/docs/ARCHITECTURE.md` — **Single source of truth** for digest-core architecture, contracts, ADRs, roadmap (verify against code when in doubt)
 - `digest-core/docs/PHASE0_PROMPT.md` — Historical Phase 0 execution checklist; not a guarantee that items are still open
 - `docs/planning/BUSINESS_REQUIREMENTS.md` — Product / business requirements (repo root `docs/`)
-- `docs/development/TECHNICAL.md` — Broader technical notes (may lag `digest-core`; prefer `ARCHITECTURE.md` for the Python package)
+- `docs/development/TECHNICAL.md` — Redirect to `digest-core/docs/ARCHITECTURE.md` (the file used to be a parallel tech overview but drifted; reduced to a redirect 2026-04-06)
 
 ## Language
 

@@ -10,25 +10,38 @@
 
 **Solution**:
 ```bash
-# Check your .env file
-cat .env
+# Verify the wizard env file exists and contains the required keys.
+# (The interactive setup wizard writes secrets to ~/.config/actionpulse/env
+# with chmod 600. See README.md / `make setup`.)
+ls -l ~/.config/actionpulse/env
+grep -E '^(EWS_|LLM_|MM_)' ~/.config/actionpulse/env | sed 's/=.*/=<set>/'
 
-# Ensure all required variables are set:
+# Ensure all required variables are present:
 # EWS_PASSWORD=your_password
 # EWS_USER_UPN=user@corp.com
 # EWS_ENDPOINT=https://ews.corp.com/EWS/Exchange.asmx
 # LLM_TOKEN=your_token
 # LLM_ENDPOINT=https://llm-gw.corp.com/api/v1/chat
+# MM_WEBHOOK_URL=https://mattermost.corp.com/hooks/...
+
+# Re-run the wizard if any are missing:
+cd digest-core && python -m digest_core.cli setup
+
+# Then load the env into the current shell session:
+set -a && source ~/.config/actionpulse/env && set +a
 ```
 
 #### Error: "python-dotenv could not parse statement"
 
-**Cause**: Invalid syntax in .env file.
+**Cause**: Invalid syntax in `~/.config/actionpulse/env` (or another env file
+loaded by your shell). Note: ActionPulse itself does not parse a project-root
+`.env` file at runtime — secrets come from the environment, populated by the
+wizard-managed file above.
 
 **Solution**:
-- Remove quotes around values: `PASSWORD=value` not `PASSWORD="value"`
-- No spaces around `=`: `KEY=value` not `KEY = value`
-- Use `#` for comments, not `//`
+- Re-run the wizard so the file is regenerated correctly: `python -m digest_core.cli setup`
+- Or fix manually: remove quotes around values (`PASSWORD=value` not `PASSWORD="value"`),
+  no spaces around `=`, and use `#` for comments (not `//`)
 
 ### 2. EWS Connection Issues
 
@@ -211,7 +224,7 @@ export OUT_DIR="$HOME/.digest-out"
 export STATE_DIR="$HOME/.digest-state"
 
 # Or run with custom paths
-./digest-core/scripts/test_run.sh
+cd digest-core && python -m digest_core.cli run
 ```
 
 #### Error: "Cannot access /etc/ssl/corp-ca.pem"
@@ -263,7 +276,7 @@ export TMPDIR="$HOME/.digest-temp"
 mkdir -p "$OUT_DIR" "$STATE_DIR" "$TMPDIR"
 
 # Run with home directory paths
-./digest-core/scripts/test_run.sh
+cd digest-core && python -m digest_core.cli run
 ```
 
 ### 10. Corporate Laptop Specific Issues
@@ -318,31 +331,31 @@ cd /mnt/c/Users/YourName/ActionPulse
 Запустите диагностику окружения:
 
 ```bash
-# Новый comprehensive doctor скрипт
-./digest-core/scripts/doctor.sh
+cd digest-core
 
-# Или legacy print_env
-./digest-core/scripts/print_env.sh
+# Основная диагностика — проверяет config, env vars, сетевую доступность
+python -m digest_core.cli diagnose
+
+# Дополнительно — печать несекретных переменных
+scripts/print_env.sh
 ```
 
-**Вывод doctor.sh покажет:**
-- ✓/✗ Python version and tools
-- ✓/✗ Environment variables status
-- ✓/✗ Network connectivity
-- ✓/✗ Directory permissions
-- ✓/✗ CA certificate status
-- ✓/✗ Virtual environment
-- ✓/✗ Dependencies
+**Вывод `diagnose` покажет:**
+- ✓/✗ Required env vars (EWS_*, LLM_*, MM_WEBHOOK_URL)
+- ✓/✗ Config file load + validation
+- ✓/✗ Output / state directory writability
+- ✓/✗ Network reachability к EWS и LLM Gateway endpoint'ам
 
 #### Collect logs
 
 ```bash
-# Автоматический сбор всей диагностики
 cd digest-core
-./digest-core/scripts/collect_diagnostics.sh
+
+# Автоматический сбор всей диагностики (логи, метрики, конфиг без секретов)
+scripts/collect_diagnostics.sh
 
 # Или вручную с verbose logging
-DIGEST_LOG_LEVEL=DEBUG python3 -m digest_core.cli --dry-run 2>&1 | tee debug.log
+DIGEST_LOG_LEVEL=DEBUG python -m digest_core.cli run --dry-run 2>&1 | tee debug.log
 
 # Check structured logs
 cat debug.log | jq .
@@ -350,11 +363,11 @@ cat debug.log | jq .
 
 #### Report issues
 
-**Для E2E тестирования:** Следуйте [E2E Testing Guide](../testing/E2E_TESTING_GUIDE.md) и используйте шаблон из [Send Results](../../docs/testing/SEND_RESULTS.md).
+**Для тестирования:** см. [`docs/testing/MANUAL_TESTING_CHECKLIST.md`](../testing/MANUAL_TESTING_CHECKLIST.md) и [`docs/testing/SEND_RESULTS.md`](../testing/SEND_RESULTS.md).
 
 **Для разработчиков:** Включите в issue:
-1. Output of `./digest-core/scripts/doctor.sh`
-2. Архив диагностики (`diagnostics-*.tar.gz`)
+1. Output of `python -m digest_core.cli diagnose`
+2. Архив диагностики (`scripts/collect_diagnostics.sh` → `diagnostics-*.tar.gz`)
 3. Configuration (without secrets)
 4. Error messages and stack traces
 5. Steps to reproduce

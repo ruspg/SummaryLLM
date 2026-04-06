@@ -1,10 +1,27 @@
 # Mattermost Integration Plan
 
+> ## 🟡 Status: Planning document — not implementation guide
+>
+> **Текущая реализация (Phase 0):** только incoming webhook delivery.
+> Класс [`MattermostDeliverer`](../../digest-core/src/digest_core/deliver/mattermost.py)
+> делает один `httpx.post()` на webhook URL из `MM_WEBHOOK_URL`. Это всё.
+>
+> **Не реализовано** (всё описанное ниже):
+> - 🔴 Bot framework / slash commands (`/digest today`)
+> - 🔴 Чтение публичных каналов MM (LVL3)
+> - 🔴 Multi-DM / приватные сообщения как источник (LVL4)
+> - 🔴 Интерактивный бот с reactions / threading (LVL5)
+> - 🔴 Любая read-сторона интеграции с MM API
+>
+> Канонический ADR: [`ARCHITECTURE.md` ADR-010](../../digest-core/docs/ARCHITECTURE.md).
+> Phase 0 = webhook (готово), Phase 1 = миграция на Bot API (запланировано).
+> Этот документ описывает желаемое состояние Phase 1+, не текущее.
+
 Детальный план интеграции ActionPulse с Mattermost для расширения источников данных и создания интерактивного бота.
 
 ## Обзор интеграции
 
-### Цели интеграции
+### Цели интеграции (Phase 1+, 🔴 not implemented)
 
 1. **LVL3** - Подключение публичных каналов Mattermost
 2. **LVL4** - Добавление личных сообщений (DM) с соблюдением приватности
@@ -17,7 +34,7 @@ Mattermost API → ingest → normalize → thread → evidence split → contex
   → LLM Gateway → validate → assemble (JSON/MD) → deliver (MM Bot)
 ```
 
-## LVL3 - Публичные каналы Mattermost
+## LVL3 - Публичные каналы Mattermost · 🔴 Not implemented
 
 ### Бизнес-смысл
 
@@ -116,7 +133,7 @@ mattermost:
 - ✅ При тесте 3–5 каналов/50 писем — T90 ≤ 90 сек
 - ✅ Дедуп кросс-постов/пересылок (sha1/MinHash + canonical URL) включён
 
-## LVL4 - Личные сообщения (DM)
+## LVL4 - Личные сообщения (DM) · 🔴 Not implemented
 
 ### Бизнес-смысл
 
@@ -197,7 +214,7 @@ class MattermostDMClient:
 - ✅ DM-пункты помечены `privacy=private`; проверка отсутствия ПДн сверх допустимого
 - ✅ Тест «DM-утечка»: пересылка не раскрывает приватные каналы адресатам без доступа
 
-## LVL5 - Mattermost-бот
+## LVL5 - Mattermost-бот · 🔴 Not implemented
 
 ### Бизнес-смысл
 

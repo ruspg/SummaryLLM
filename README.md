@@ -56,7 +56,7 @@ Exchange (EWS)
                                                                                └── Mattermost DM
 ```
 
-LLM: `qwen35-397b-a17b` через корп. gateway, 15 RPM, max 1 вызов за запуск.
+LLM: `qwen35-397b-a17b` через корп. gateway, 15 RPM, **max 2 вызова за запуск** (1 primary extraction + опциональный quality retry, см. ADR-008).
 
 Полные контракты стадий: [`digest-core/docs/ARCHITECTURE.md`](digest-core/docs/ARCHITECTURE.md).
 

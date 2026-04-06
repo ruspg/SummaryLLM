@@ -141,6 +141,4 @@ python -m digest_core.cli export-diagnostics --trace-id <id> --send-mm
 
 Phase 0 hardening (prompts, path resolution, config precedence, LLM retry/degradation, Mattermost delivery, replay/diagnostics, E2E tests) is implemented on `main` as of 2026-03.
 
-Authoritative checklist: `docs/ARCHITECTURE.md §13`. That table is not fully reconciled with the codebase yet—verify behavior with `make test` and source before treating a TD row as open.
-
-Suggested doc follow-up: refresh `ARCHITECTURE.md` §9.1 (prompt filenames), §5.2 (TD-003 narrative), and §8/§13 rows that still describe pre-merge behavior.
+Authoritative checklist: `docs/ARCHITECTURE.md §13`. The table is mostly reconciled with the codebase as of 2026-04 (see ACTPULSE-61). Still verify behavior with `make test` and source before treating any §13.2 row as currently open.

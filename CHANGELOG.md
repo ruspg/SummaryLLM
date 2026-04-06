@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - All setup documentation now points at the interactive wizard as the canonical path; manual `cp deploy/env.example` kept only as an explicit headless / CI fallback (ACTPULSE-60).
 - Consolidated all utility scripts under `digest-core/scripts/` and refreshed documentation links.
-- Archived historical implementation reports in `docs/legacy/` for easier navigation.
+- Reconciled docs vs code: corrected `max LLM calls per run` (1 → 2) in `README.md` and `ARCHITECTURE.md` diagram; rewrote `ARCHITECTURE.md` ADR-009 prose in past tense; converted `docs/development/TECHNICAL.md` to a redirect to the SoT; added status banner to `docs/planning/MATTERMOST_INTEGRATION.md` clarifying that bot/multi-channel features are not yet implemented; corrected `TROUBLESHOOTING.md` env-file path (`~/.config/actionpulse/env`) (ACTPULSE-61).
+- Archived historical implementation reports in `docs/legacy/` for easier navigation. The 2026-04-06 sweep added `E2E_TESTING_GUIDE.md`, `IMPLEMENTATION_SUMMARY.md`, `DOCUMENTATION_VALIDATION.md` (referenced shell scripts that never existed in the repo).
 - Merged `digest-core/docs/` content into the main `docs/` structure.
 - Introduced versioned prompt directories and a registry for template lookups.
 
@@ -59,7 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Previous Releases
 
 ### Added (Pre-1.1.0)
-- One-command installation scripts (install.sh, quick-install.sh)
+- One-command systemd installer (`digest-core/deploy/install-systemd.sh`).
+  _Note (corrected 2026-04-06): earlier drafts of this entry referenced
+  `install.sh` and `quick-install.sh`, which were never committed to the repo._
 - Comprehensive documentation restructure with organized docs/ directory
 - Monitoring and observability guides
 - Project structure cleanup with proper .gitignore and .editorconfig

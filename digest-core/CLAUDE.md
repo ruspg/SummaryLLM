@@ -9,9 +9,10 @@ Python 3.11 package. Daily email digest pipeline: EWS → normalize → threads 
 git fetch origin --prune
 git status --short --branch
 
-# Setup
-uv sync --native-tls                 # Install dependencies (native TLS for corp proxy)
-make setup                           # Same via Makefile (with native-tls fallback)
+# Setup — canonical: interactive wizard (6 questions, no text editor)
+make setup                           # uv sync --native-tls + python -m digest_core.cli setup
+python -m digest_core.cli setup      # Re-run wizard (reads existing values as defaults)
+uv sync --native-tls                 # Deps only, no wizard (headless / CI)
 
 # Development
 make test                            # Run pytest (all mocked, no network needed)

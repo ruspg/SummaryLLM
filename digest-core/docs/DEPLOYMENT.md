@@ -15,25 +15,31 @@ uv sync --native-tls
 
 ## 2. Configuration
 
-### Environment variables
+### Interactive (recommended)
 
-Copy the example env file and fill in real values:
+```bash
+python -m digest_core.cli setup
+```
+
+6 questions: corp email, EWS endpoint, EWS password, LLM endpoint, LLM token, Mattermost webhook. Auto-derives `user_login`, `user_domain`, and name aliases from the email address. Writes `~/.config/actionpulse/env` (chmod 600, systemd-compatible) and `configs/config.yaml`. Safe to re-run — existing values are used as defaults. Secrets are hidden on input with confirmation prompts.
+
+Or run `make setup` from `digest-core/` to chain `uv sync --native-tls` with the wizard in one command.
+
+### Manual (fallback for headless / CI / no-TTY)
+
+If no interactive TTY is available (CI seeds, pre-provisioned systemd units):
 
 ```bash
 mkdir -p ~/.config/actionpulse
 cp deploy/env.example ~/.config/actionpulse/env
 chmod 600 ~/.config/actionpulse/env
-# Edit with your secrets
-```
+# Edit with real values; required: EWS_PASSWORD, LLM_TOKEN, MM_WEBHOOK_URL
 
-Required variables: `EWS_PASSWORD`, `LLM_TOKEN`, `MM_WEBHOOK_URL`.
-
-### YAML config (optional)
-
-```bash
 cp configs/config.example.yaml configs/config.yaml
-# Edit EWS endpoint, user_upn, timezone, etc.
+# Edit EWS endpoint, user_upn, user_domain, aliases, timezone
 ```
+
+Required environment variables: `EWS_PASSWORD`, `LLM_TOKEN`, `MM_WEBHOOK_URL`.
 
 ## 3. Manual test run
 

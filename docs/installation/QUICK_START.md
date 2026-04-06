@@ -2,36 +2,31 @@
 
 Быстрый старт с ActionPulse - получите первый дайджест за 5 минут.
 
-## Автоматическая установка (рекомендуется)
-
-### Одна команда для полной установки
+## Установка
 
 ```bash
-# Полная установка с интерактивной настройкой
-curl -fsSL https://raw.githubusercontent.com/ruspg/ActionPulse/main/digest-core/scripts/install.sh | bash
-
-# Или: без интерактивной настройки (только клонирование + зависимости)
-curl -fsSL https://raw.githubusercontent.com/ruspg/ActionPulse/main/digest-core/scripts/install.sh | bash -s -- --skip-setup
+git clone https://github.com/ruspg/ActionPulse.git
+cd ActionPulse/digest-core
+make setup    # установка зависимостей + интерактивный мастер (6 вопросов)
 ```
 
-### Что происходит при установке
+Мастер спросит: корпоративный email, EWS endpoint, EWS пароль, LLM endpoint, LLM токен, Mattermost webhook URL. Сгенерирует:
+- `~/.config/actionpulse/env` (chmod 600, systemd-compatible)
+- `configs/config.yaml`
 
-1. **Клонирование репозитория** в `~/ActionPulse`
-2. **Проверка зависимостей** (Python 3.11+, uv, docker)
-3. **Установка зависимостей** (если нужно)
-4. **Интерактивная настройка** (только для полной установки)
-5. **Создание конфигурационных файлов**
+Безопасно перезапускать: `python -m digest_core.cli setup` читает существующие значения как дефолты. Секреты скрываются при вводе.
 
-## Ручная установка
+### Headless / CI (без TTY)
 
-### Если у вас уже есть клон репозитория
+Если TTY недоступен (CI, systemd pre-provision), используйте ручной флоу:
 
 ```bash
-# Запуск интерактивного мастера настройки
-./digest-core/scripts/setup.sh
-
-# Или из директории digest-core
-cd digest-core && make setup-wizard
+mkdir -p ~/.config/actionpulse
+cp digest-core/deploy/env.example ~/.config/actionpulse/env
+chmod 600 ~/.config/actionpulse/env
+# Заполнить: EWS_PASSWORD, LLM_TOKEN, MM_WEBHOOK_URL
+cp digest-core/configs/config.example.yaml digest-core/configs/config.yaml
+# Отредактировать endpoint'ы, user_upn, aliases
 ```
 
 ## Первый запуск
@@ -39,29 +34,17 @@ cd digest-core && make setup-wizard
 ### 1. Активируйте окружение
 
 ```bash
-cd ~/ActionPulse
-set -a && source .env && set +a
+set -a && source ~/.config/actionpulse/env && set +a
 ```
 
-### 2. Перейдите в директорию digest-core
+### 2. Проверьте конфигурацию
 
 ```bash
 cd digest-core
+python -m digest_core.cli diagnose
 ```
 
-### 3. Установите зависимости (если не сделали в setup)
-
-```bash
-make setup
-```
-
-### 4. Проверьте конфигурацию
-
-```bash
-make env-check
-```
-
-### 5. Запустите первый дайджест
+### 3. Запустите первый дайджест
 
 > **Требуется Python 3.11+**. На macOS установите `brew install python@3.11` и используйте `python3.11` явно.
 

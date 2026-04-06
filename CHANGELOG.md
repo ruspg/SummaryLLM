@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Interactive setup wizard via `python -m digest_core.cli setup` / `make setup` — 6 questions, 0 text editors. Generates `~/.config/actionpulse/env` (chmod 600, systemd-compatible) and `configs/config.yaml`. Safe to re-run (PR #32).
+
 ### Changed
+- All setup documentation now points at the interactive wizard as the canonical path; manual `cp deploy/env.example` kept only as an explicit headless / CI fallback (ACTPULSE-60).
 - Consolidated all utility scripts under `digest-core/scripts/` and refreshed documentation links.
 - Archived historical implementation reports in `docs/legacy/` for easier navigation.
 - Merged `digest-core/docs/` content into the main `docs/` structure.

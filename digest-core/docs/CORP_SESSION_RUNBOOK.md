@@ -36,18 +36,26 @@ python -m digest_core.cli mm-ping
 
 Если `OK (HTTP 200)` — webhook работает. Если нет — почини до корп-сессии.
 
-### 0.3 Подготовить env-файл
+### 0.3 Настройка (интерактивный мастер)
 
+На корп-машине (или заранее дома, чтобы ускорить корп-сессию):
+
+```bash
+cd digest-core
+python -m digest_core.cli setup
+```
+
+Мастер задаст 6 вопросов (корпоративный email, EWS endpoint, EWS пароль, LLM endpoint, LLM токен, Mattermost webhook URL) и сгенерирует:
+- `~/.config/actionpulse/env` (chmod 600, systemd-compatible)
+- `configs/config.yaml`
+
+Безопасно перезапускать: `python -m digest_core.cli setup` читает существующие значения как дефолты.
+
+**Альтернатива без TTY (systemd pre-provision, CI):**
 ```bash
 cp deploy/env.example ~/.config/actionpulse/env
 chmod 600 ~/.config/actionpulse/env
-```
-
-Заполнить реальными значениями:
-```
-EWS_PASSWORD=реальный_пароль
-LLM_TOKEN=реальный_токен
-MM_WEBHOOK_URL=https://mm.corp.com/hooks/xxx
+# Заполнить реальными значениями: EWS_PASSWORD, LLM_TOKEN, MM_WEBHOOK_URL
 ```
 
 ---

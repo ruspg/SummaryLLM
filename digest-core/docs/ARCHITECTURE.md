@@ -490,9 +490,15 @@ observability:
 4. YAML по пути из `DIGEST_CONFIG_PATH` (если задан)
 5. Переменные окружения и `.env` через `pydantic-settings` при создании `Config`
 
-**Реализация в коде (`config.py`):** сначала выполняется `BaseSettings.__init__` (defaults + `.env` + env), затем по очереди накладываются YAML-файлы через `_apply_yaml_config()` → `_merge_model()`. Для выбранных полей зафиксировано **«если задана переменная окружения — не перезаписывать из YAML»** через `env_field_map`: EWS (`EWS_ENDPOINT`, `EWS_USER_UPN`, `EWS_USER_LOGIN`, `EWS_USER_DOMAIN`) и LLM (`LLM_ENDPOINT`). Пароль EWS и токен LLM читаются только из ENV и в YAML не мержатся.
+**Реализация в коде (`config.py`):** сначала выполняется `BaseSettings.__init__` (defaults + `.env` + env), затем по очереди накладываются YAML-файлы через `_apply_yaml_config()` → `_merge_model()`. Для каждого поля, перед применением YAML-значения, проверяется наличие переопределения через ENV, и если ENV задан — YAML значение **пропускается**.
 
-**Ограничение (остаток TD-003):** у полей без записи в `env_field_map` значение из YAML может перезаписать уже выставленное pydantic-settings значение nested-модели. Полное «ENV wins для каждого поля» потребует либо загрузки YAML до `BaseSettings`, либо расширения карты соответствий env ↔ поле (и тестов).
+Используются два механизма ENV-override (см. `_merge_model()` в `config.py`):
+- **Explicit `env_field_map`** для обратной совместимости: EWS (`EWS_ENDPOINT`, `EWS_USER_UPN`, `EWS_USER_LOGIN`, `EWS_USER_DOMAIN`) и LLM (`LLM_ENDPOINT`).
+- **Generic `env_prefix`** на каждой секции (`DIGEST_<PREFIX>_<FIELD>`): TIME, EWS, LLM, MM (deliver.mattermost), OBS (observability), SEL_BUCKETS, SEL_WEIGHTS, CONTEXT_BUDGET, CHUNKING, SHRINK, HIERARCHICAL, EMAIL_CLEANER, NLP, RANKER, DEGRADE. Например: `DIGEST_LLM_TIMEOUT_S=300` переопределит `llm.timeout_s` в YAML.
+
+Пароль EWS (`EWS_PASSWORD`) и токен LLM (`LLM_TOKEN`) читаются напрямую из ENV в `get_password()`/`get_token()` и в YAML не мержатся вообще.
+
+**Status:** TD-003 закрыт в Phase 0 (см. §13.1) — каждое поле в nested-конфиге имеет хотя бы один корректный env-override путь через generic prefix.
 
 ### 5.3 Secrets (ENV only, never in YAML)
 
@@ -943,6 +949,7 @@ digest-core/
 | TD-011 | HTTP 429/5xx → `RetryableLLMError`, tenacity, мин. интервал вызовов |
 | TD-012 | `rate_limit_rpm` в `LLMConfig` |
 | TD-013 | `timeout_s` default **120** |
+| TD-003 | `_merge_model()` пропускает YAML, если задан `env_field_map[key]` или `DIGEST_{prefix}_{key}`; каждая секция имеет `env_prefix`, поэтому каждое nested-поле имеет валидный env-override путь (см. §5.2) |
 | Stage 8 | `deliver/mattermost.py`, webhook, best-effort (ADR-011) |
 | Offline | `--dump-ingest`, `--replay-ingest`, `export-diagnostics` |
 | QA | `tests/test_e2e_pipeline.py`, `--force` для идемпотентности |
@@ -951,7 +958,6 @@ digest-core/
 
 | ID | Component | Issue | Severity | Phase |
 |----|-----------|-------|----------|-------|
-| TD-003 | `config.py` | Полный «ENV wins» для всех полей не гарантирован (§5.2) | Medium | Phase 1 |
 | TD-006 | `llm.cost_limit_per_run` | Нет enforcement | Low | Phase 1 |
 | TD-008 | `run.py` | Нет `if __name__ == "__main__"` (вход через `cli`) | Low | Phase 1 |
 | TD-009 | `ingest/ews.py` | `NormalizedMessage` на выходе Stage 1 — вводящее имя | Low | Phase 1 |

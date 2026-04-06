@@ -1,5 +1,15 @@
 # Phase 0 Implementation Prompt
 
+> **🗄️ HISTORICAL — Phase 0 was completed in 2026-03.** Этот документ —
+> исходный execution-промпт для Phase 0 hardening (TD-001 ... TD-013, Stage 8,
+> offline tooling, E2E tests). Все упомянутые задачи уже реализованы и
+> зафиксированы в [`ARCHITECTURE.md` §13.1](./ARCHITECTURE.md). Например,
+> упоминания `extract_actions.v1.j2` ниже относятся к **завершённому**
+> переименованию `.j2 → .txt` (TD-010).
+>
+> Не используйте этот файл как чек-лист текущей работы. Для актуального
+> состояния технического долга см. `ARCHITECTURE.md §13.2`.
+
 > Copy-paste this into a new Claude Code session to start executing Phase 0 backlog.
 
 ---

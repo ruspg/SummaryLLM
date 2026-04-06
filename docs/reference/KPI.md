@@ -1,5 +1,38 @@
 # Key Performance Indicators (KPI)
 
+> ## ⚠️ Status: Целевые KPI — большая часть пока не инструментирована
+>
+> Этот документ описывает **целевые** KPI, которые мы хотим отслеживать. Часть из
+> них требует gold-set evaluation и/или дополнительной инструментации, которой
+> сегодня в коде нет.
+>
+> **Что инструментировано сегодня** (см.
+> [`metrics.py`](../../digest-core/src/digest_core/observability/metrics.py) и
+> [`ARCHITECTURE.md §6.1`](../../digest-core/docs/ARCHITECTURE.md)):
+>
+> - Производительность / latency: `digest_build_seconds`, `pipeline_stage_duration_seconds`,
+>   `llm_latency_ms`, `runs_total{status}`
+> - Объёмы: `emails_total{status}`, `evidence_chunks_total{stage}`, `threads_total{status}`,
+>   `llm_tokens_in_total`, `llm_tokens_out_total`
+> - Качество (counters, не P/R/F1): `actions_found_total{action_type}`,
+>   `mentions_found_total`, `actions_confidence_histogram`, `citations_per_item_histogram`
+> - Ошибки и деградации: `errors_total{error_type,stage}`, `degradations_total{reason}`,
+>   `validation_error_total{type}`, `llm_json_error_total`, `citation_validation_failures_total`
+> - Прочее: `redundancy_index`, `top10_actions_share`, `rank_score_histogram`
+>
+> **Что НЕ инструментировано** (целевые KPI ниже, помеченные 🔴):
+>
+> - 🔴 `coverage_significant_events` — требует gold-set
+> - 🔴 `action_items_accuracy` (P/R/F1, exact-match) — требует gold-set + аннотации
+> - 🔴 `digest_generation_time_p90` — есть `digest_build_seconds` Summary, но не отдельный p90 gauge
+> - 🔴 `bot_delivery_sla` — нет отслеживания окна доставки
+> - 🔴 `user_satisfaction_score` — нет фидбек-механизма (👍/👎 в MM bot — Phase 1+)
+> - 🔴 `mentions_f1` / `mentions_precision` / `mentions_recall` / Brier Score — требуют gold-set
+> - 🔴 `hallucination_rate` — требует валидации против evidence outside `validate_citations`
+>
+> Документ ведётся как target spec; раздел "Status" обновляется по мере
+> реализации соответствующих метрик.
+
 Ключевые показатели эффективности и целевые метрики для ActionPulse.
 
 ## Основные KPI

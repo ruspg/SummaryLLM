@@ -1,5 +1,27 @@
 # Cost Management and Budget Control
 
+> ## ⚠️ Status: Phase 1+ design — not yet implemented
+>
+> **Что реализовано сегодня (Phase 0):** только token-budget enforcement через
+> `LLMConfig.max_tokens_per_run` (default 30 000). При превышении гейтвей
+> выбрасывает `TokenBudgetExceeded` (см.
+> [`gateway.py:394-407`](../../digest-core/src/digest_core/llm/gateway.py)).
+>
+> **Что НЕ реализовано** (всё описанное ниже):
+> - 🔴 `cost_limit_per_run` enforcement (TD-006 в `ARCHITECTURE.md §13.2` open)
+> - 🔴 Per-user / per-organization daily/monthly/yearly cost limits
+> - 🔴 `CostOptimizer` класс, fallback strategies, automatic optimization
+> - 🔴 Cost-related Prometheus метрики (`cost_per_digest_usd`, `budget_utilization_percent`,
+>   `cost_optimization_events_total`)
+> - 🔴 Cost reporting / алерты по стоимости
+>
+> Для проверки текущих лимитов смотрите ARCHITECTURE.md §5.1 (`LLMConfig`)
+> и §6.1 (instrumented Prometheus метрики).
+>
+> Этот документ описывает желаемое состояние Phase 1+, не текущее.
+> Связанная задача: ACTPULSE-41 (закрыт, alignment не завершён) и
+> [TD-006](../../digest-core/docs/ARCHITECTURE.md).
+
 Управление стоимостью и контроль бюджета для ActionPulse.
 
 ## Обзор системы управления стоимостью

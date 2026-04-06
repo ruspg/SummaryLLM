@@ -1,5 +1,28 @@
 # Code Examples
 
+> ## ⚠️ Status: Иллюстративные примеры — не актуальные сигнатуры
+>
+> Этот документ содержит **иллюстративный** псевдо-код, написанный на раннем
+> этапе планирования. Сигнатуры функций, имена параметров и поток управления
+> **не совпадают** с актуальной реализацией. Конкретные расхождения, найденные
+> при аудите 2026-04-06:
+>
+> - `model="corp/qwen35-397b-a17b"` → реальный default `"qwen35-397b-a17b"` (без
+>   префикса `corp/`), см. [`cli.py:29`](../../digest-core/src/digest_core/cli.py).
+> - `run_digest(from_date, sources, output_dir, model, dry_run, verbose, window, config)`
+>   с возвратом `result` объекта (`result.success`, `result.output_files`, `result.error`)
+>   → реальная сигнатура: `run_digest(from_date, sources, out, model, window, state, validate_citations=False, force=False, dump_ingest=None, replay_ingest=None, record_llm=None, replay_llm=None) -> bool`
+>   (см. [`run.py:80`](../../digest-core/src/digest_core/run.py)). Параметра `verbose`
+>   и параметра `config` нет; параметр зовётся `out`, а не `output_dir`.
+> - Структура `LLMGatewayClient` ниже — упрощённая иллюстрация; реальный
+>   `LLMGateway` в [`llm/gateway.py`](../../digest-core/src/digest_core/llm/gateway.py)
+>   использует `tenacity.Retrying`, `RetryableLLMError`, rate-limit spacing
+>   через `MIN_LLM_INTERVAL_SECONDS`, и quality retry на пустые секции.
+>
+> Используйте этот документ для **общего понимания подхода** (Typer-CLI,
+> retry-логика, structlog), а не как источник для копирования. Канонический
+> код — в `digest-core/src/digest_core/`.
+
 Практические примеры кода для разработки ActionPulse с детальными объяснениями и best practices.
 
 ## CLI Implementation

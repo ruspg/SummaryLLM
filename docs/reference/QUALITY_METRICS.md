@@ -1,5 +1,32 @@
 # Quality Metrics and AI Evaluation
 
+> ## ⚠️ Status: Phase 1+ design — gold-set evaluation не реализован
+>
+> Этот документ описывает **запланированную** систему оценки качества (gold-сеты,
+> разметка, P/R/F1, regression-гейтинг). Сегодня в коде ничего из этого нет.
+>
+> **Что есть сегодня (Phase 0):**
+>
+> - Pydantic-валидация LLM output на каждом запуске (см.
+>   [`llm/schemas.py`](../../digest-core/src/digest_core/llm/schemas.py))
+> - Citation validation через `--validate-citations` (exit code 2 при failures)
+> - Counter-метрики (не quality scores): `actions_found_total`, `mentions_found_total`,
+>   `actions_confidence_histogram`, `citation_validation_failures_total`
+> - Quality retry на пустые секции при наличии positive evidence (см. ADR-008)
+>
+> **Что НЕ реализовано** (всё описанное ниже):
+>
+> - 🔴 Gold-сеты, разметка, inter-annotator agreement
+> - 🔴 P/R/F1, exact-match, partial-match, hallucination_rate как метрики
+> - 🔴 Regression-гейтинг по качеству (CI блокирует merge при падении метрик)
+> - 🔴 Brier Score (калибровка confidence)
+> - 🔴 A/B-тестирование промптов
+>
+> Документ ведётся как target spec для Phase 1+. До тех пор канонический список
+> инструментированных метрик —
+> [`metrics.py`](../../digest-core/src/digest_core/observability/metrics.py) и
+> [`ARCHITECTURE.md §6.1`](../../digest-core/docs/ARCHITECTURE.md).
+
 Метрики качества AI и система оценки эффективности ActionPulse.
 
 ## Обзор системы качества

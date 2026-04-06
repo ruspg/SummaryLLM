@@ -329,6 +329,6 @@ time:
 - [Пример успешного отчета](./successful_test_report.md)
 - [Специфика корпоративных ноутбуков](./corporate_laptop_setup.md)
 - [Troubleshooting Guide](../../troubleshooting/TROUBLESHOOTING.md)
-- [E2E Testing Guide](../E2E_TESTING_GUIDE.md)
+- [E2E Testing Guide (архив)](../../legacy/E2E_TESTING_GUIDE.md)
 
 

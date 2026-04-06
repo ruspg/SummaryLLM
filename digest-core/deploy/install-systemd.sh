@@ -27,7 +27,7 @@ will fail with missing EWS_PASSWORD / LLM_TOKEN / MM_WEBHOOK_URL.
 
 Recommended: run the interactive wizard from the repo:
 
-    cd "$(cd "$SCRIPT_DIR/.." && pwd)" && python -m digest_core.cli setup
+    cd "$(cd "$SCRIPT_DIR/.." && pwd)" && make setup
 
 Or seed the template manually (headless / CI):
 

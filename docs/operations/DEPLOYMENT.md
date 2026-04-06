@@ -111,11 +111,10 @@ LLM_ENDPOINT="https://llm-gw.corp.com/api/v1/chat"
 
 ### Optional
 
-```bash
-DIGEST_LOG_LEVEL="INFO"
-PROMETHEUS_PORT="9108"
-HEALTH_PORT="9109"
-```
+- **`DIGEST_CONFIG_PATH`** — переопределить путь к YAML-конфигу (см. `config.py`).
+- Порт **Prometheus** задаётся в конфиге **`observability.prometheus_port`** (по умолчанию 9108), не отдельной переменной окружения в стиле `PROMETHEUS_PORT`.
+- Порт **health HTTP** сейчас **9109** и задан в коде (`run.py` + `healthz.py`), отдельного `HEALTH_PORT` в конфиге нет.
+- Уровень логов — флаг CLI **`--log-level`**, не `DIGEST_LOG_LEVEL`.
 
 ## Port Configuration
 
@@ -158,4 +157,4 @@ openssl x509 -in /etc/ssl/corp-ca.pem -text -noout
 
 - [AUTOMATION.md](AUTOMATION.md) - Настройка автоматизации
 - [MONITORING.md](MONITORING.md) - Мониторинг и observability
-- [digest-core/TROUBLESHOOTING.md](digest-core/TROUBLESHOOTING.md) - Детальное troubleshooting
+- [Troubleshooting](../troubleshooting/TROUBLESHOOTING.md) — общее руководство

@@ -8,9 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Interactive setup wizard via `python -m digest_core.cli setup` / `make setup` — 6 questions, 0 text editors. Generates `~/.config/actionpulse/env` (chmod 600, systemd-compatible) and `configs/config.yaml`. Safe to re-run (PR #32).
+- [`MIGRATION.md`](./MIGRATION.md) at repo root — clarifies V2→V3 field removals vs the default `digest_core.cli run` output (`Digest` schema `1.0` + `extract_actions` prompts).
 
 ### Changed
+- Interactive setup wizard via **`make setup`** (from `digest-core/`) — 6 questions, 0 text editors. Generates `~/.config/actionpulse/env` (chmod 600, systemd-compatible) and `configs/config.yaml`. Safe to re-run. There is **no** `digest_core.cli setup` command (PR #32).
 - All setup documentation now points at the interactive wizard as the canonical path; manual `cp deploy/env.example` kept only as an explicit headless / CI fallback (ACTPULSE-60).
 - Consolidated all utility scripts under `digest-core/scripts/` and refreshed documentation links.
 - Reconciled docs vs code: corrected `max LLM calls per run` (1 → 2) in `README.md` and `ARCHITECTURE.md` diagram; rewrote `ARCHITECTURE.md` ADR-009 prose in past tense; converted `docs/development/TECHNICAL.md` to a redirect to the SoT; added status banner to `docs/planning/MATTERMOST_INTEGRATION.md` clarifying that bot/multi-channel features are not yet implemented; corrected `TROUBLESHOOTING.md` env-file path (`~/.config/actionpulse/env`) (ACTPULSE-61).
@@ -19,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Archived historical implementation reports in `docs/legacy/` for easier navigation. The 2026-04-06 sweep added `E2E_TESTING_GUIDE.md`, `IMPLEMENTATION_SUMMARY.md`, `DOCUMENTATION_VALIDATION.md` (referenced shell scripts that never existed in the repo).
 - Merged `digest-core/docs/` content into the main `docs/` structure.
 - Introduced versioned prompt directories and a registry for template lookups.
+- Operations and developer docs reconciled with `observability/metrics.py`, `healthz.py`, and `digest-core/deploy/*` (systemd user units, cron example); fixed broken doc index links (ACTPULSE-63).
 
 ## [1.1.0] - 2024-10-15
 
@@ -53,9 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `owners_masked` field from all schemas
 
 ### Migration Guide
-- See `MIGRATION.md` for detailed migration instructions
+- See [`MIGRATION.md`](./MIGRATION.md) for detailed migration instructions
 - Existing V2 digests will continue to render correctly
 - New digests use V3 schema with plain text fields
+
+**Clarification (documentation, 2026-04):** The **default daily CLI** (`python -m digest_core.cli run`) assembles a `Digest` with `schema_version="1.0"` and extraction prompts `extract_actions*.v1`. The **`EnhancedDigestV3` / `mvp.5`** pair applies to the LLM gateway’s **separate** summarization path (`process_digest` with Jinja `summarize/mvp/v5`), not to that default run output. Package-level constants in `digest_core/__init__.py` describe the V3/mvp.5 contract for that gateway path; avoid assuming they describe the JSON shape written by `run` without checking `run.py` and `llm/schemas.py`.
 
 ---
 

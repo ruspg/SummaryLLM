@@ -8,7 +8,7 @@
 
 ## Что это
 
-Single-tenant CLI инструмент. Читает Exchange inbox, прогоняет через 8-стадийный pipeline, доставляет в Mattermost DM.
+Single-tenant CLI инструмент. Читает Exchange inbox, прогоняет через 8-стадийный pipeline, доставляет итог в Mattermost через **incoming webhook** (целевой канал задаётся при создании webhook в Mattermost).
 
 **Не суммаризатор** — LLM извлекает факты из писем, а не пишет от себя. Три секции на выходе:
 - **Мои действия** — что от тебя ожидают
@@ -39,7 +39,7 @@ python -m digest_core.cli run --dry-run
 python -m digest_core.cli run
 ```
 
-Мастер задаст: корпоративный email, EWS endpoint, EWS пароль, LLM endpoint, LLM токен, Mattermost webhook URL. Сгенерирует `~/.config/actionpulse/env` (chmod 600) и `configs/config.yaml`. Безопасно перезапускать: `python -m digest_core.cli setup`.
+Мастер задаст: корпоративный email, EWS endpoint, EWS пароль, LLM endpoint, LLM токен, Mattermost webhook URL. Сгенерирует `~/.config/actionpulse/env` (chmod 600) и `configs/config.yaml`. Повторная настройка: снова `make setup` из каталога `digest-core/` (отдельной команды `digest_core.cli setup` нет).
 
 ### Mattermost интеграция (важно)
 ActionPulse использует **incoming webhook** Mattermost для **доставки** готового дайджеста (Stage 8). Для чтения сообщений/DM пассивно собирать данные не требуется — в MVP не используется API/WebSocket “для чтения”.
@@ -53,7 +53,7 @@ ActionPulse использует **incoming webhook** Mattermost для **дос
 ```
 Exchange (EWS)
     └── INGEST → NORMALIZE → THREADS → EVIDENCE → SELECT → LLM → ASSEMBLE → DELIVER
-                                                                               └── Mattermost DM
+                                                                               └── Mattermost (webhook)
 ```
 
 LLM: `qwen35-397b-a17b` через корп. gateway, 15 RPM, **max 2 вызова за запуск** (1 primary extraction + опциональный quality retry, см. ADR-008).
@@ -68,8 +68,8 @@ LLM: `qwen35-397b-a17b` через корп. gateway, 15 RPM, **max 2 вызов
 |--|--|
 | **Extract-over-Generate** | LLM извлекает из evidence, каждый пункт привязан к `evidence_id` |
 | **Traceability** | Пункт → `evidence_id` → `source_ref` → оригинальное письмо |
-| **Privacy-first** | PII маскируется на уровне LLM Gateway, локальное хранение ≤7 дней |
-| **Idempotency** | `(user_id, date)` → один результат при любом числе перезапусков |
+| **Privacy-first** | Локальный модуль маскировки PII снят в 1.1.0; обработка персональных данных на стороне корпоративного LLM Gateway. Тела писем и секреты не пишутся в логи |
+| **Idempotency** | Артефакты за выбранную дату: при повторных запусках в окне **T−48h** пропуск пересборки, если JSON/MD уже свежие (`run --force` обходит проверку) |
 
 ---
 

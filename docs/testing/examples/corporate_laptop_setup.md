@@ -440,7 +440,7 @@ curl --cacert ~/certs/corporate-ca.pem \
 
 ## См. также
 
-- [E2E Testing Guide](../E2E_TESTING_GUIDE.md) - основной гайд по установке
+- [E2E Testing Guide (архив)](../../legacy/E2E_TESTING_GUIDE.md) — исторический документ; для установки см. корневой [`README.md`](../../../README.md) и [`installation/QUICK_START.md`](../../installation/QUICK_START.md)
 - [Troubleshooting Guide](../../troubleshooting/TROUBLESHOOTING.md) - решение проблем
 - [Пример успешного отчета](./successful_test_report.md)
 - [Пример отчета с проблемами](./failed_test_report.md)

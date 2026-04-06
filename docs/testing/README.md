@@ -72,7 +72,7 @@ python -m digest_core.cli export-diagnostics --trace-id <id> --send-mm
 
 ## Архивные документы
 
-Ранее этот каталог содержал большой E2E-гайд (`E2E_TESTING_GUIDE.md`),
+Ранее этот каталог содержал большой E2E-гайд (сейчас в архиве: [`docs/legacy/E2E_TESTING_GUIDE.md`](../legacy/E2E_TESTING_GUIDE.md)),
 implementation summary, и validation-чек-лист. Эти файлы ссылались на
 shell-скрипты (`install_interactive.sh`, `doctor.sh`, `test_run.sh`), которые
 никогда не существовали в репозитории. Они перенесены в

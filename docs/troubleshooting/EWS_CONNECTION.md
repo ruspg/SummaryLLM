@@ -98,7 +98,7 @@ curl -I https://owa.xxx.ru/EWS/Exchange.asmx
 
 - Доступ осуществляется из внутренней сети, без проброса наружу.
     
-- Секреты (логин/пароль) задаются через ENV (`N8N_EXCH_PASS` / секретное хранилище).
+- Секреты (логин/пароль) для ActionPulse задаются через ENV: по умолчанию пароль читается из **`EWS_PASSWORD`** (или имя из `ews.password_env` в YAML), см. `digest_core/config.py` и `deploy/env.example`.
     
 - Логи не содержат значений полей `EXCH_PASS`.
     

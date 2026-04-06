@@ -1,149 +1,92 @@
 # ActionPulse Monitoring Guide
 
-Руководство по мониторингу и observability для ActionPulse.
+Руководство по мониторингу и observability для ActionPulse. **Источник имён метрик и эндпоинтов:** `digest-core/src/digest_core/observability/metrics.py` и `healthz.py` (при расхождении с другими документами верьте коду).
 
 ## Metrics
 
-### Prometheus Metrics
+### Prometheus endpoint
 
-Доступны по адресу `http://localhost:9108/metrics`:
+Метрики отдаются на **`http://<host>:9108/metrics`** (порт по умолчанию задаётся в конфиге `observability.prometheus_port`, см. `config.py`).
 
-#### LLM Metrics
+Ниже — основные семейства, реально объявленные в `MetricsCollector`:
 
-- `llm_latency_ms`: Гистограмма времени ответа LLM
-- `llm_tokens_in_total`: Счетчик входящих токенов
-- `llm_tokens_out_total`: Счетчик исходящих токенов
-- `llm_requests_total{status}`: Счетчик запросов по статусу
+| Метрика | Тип | Заметки |
+|--------|-----|---------|
+| `llm_latency_ms` | Histogram | Латентность LLM |
+| `llm_tokens_in_total` | Counter | Входящие токены |
+| `llm_tokens_out_total` | Counter | Исходящие токены |
+| `llm_request_context_total` | Counter | Лейблы: `model`, `operation` (не `status`) |
+| `emails_total` | Counter | Лейбл `status`: fetched, filtered, normalized, failed |
+| `digest_build_seconds` | Summary | Время сборки дайджеста |
+| `runs_total` | Counter | Лейбл `status`: ok, retry, failed |
+| `evidence_chunks_total` | Counter | Лейбл `stage` |
+| `threads_total` | Counter | Лейбл `status` |
+| `pipeline_stage_duration_seconds` | Histogram | Лейбл `stage` (ingest, normalize, …) |
+| `errors_total` | Counter | Лейблы `error_type`, `stage` |
+| `memory_usage_bytes` | Gauge | Память процесса |
+| `system_uptime_seconds` | Gauge | Аптайм |
 
-#### Email Processing Metrics
+Дополнительно в том же модуле объявлены счётчики/гистограммы для email cleaner, citations, actions, threading и др. Полный список — в исходнике `metrics.py`.
 
-- `emails_total{status}`: Обработка писем по статусу
-- `emails_processed_total`: Общее количество обработанных писем
-- `emails_failed_total`: Количество неудачно обработанных писем
+**Нет в коде (не используйте в алертах по старым гайдам):** отдельные `emails_processed_total` / `emails_failed_total`, `llm_requests_total{status}`, `digest_items_total`, `cpu_usage_percent`.
 
-#### Digest Metrics
-
-- `digest_build_seconds`: Время сборки дайджеста
-- `digest_items_total`: Количество элементов в дайджесте
-- `runs_total{status}`: Статус запусков (ok/retry/failed)
-
-#### System Metrics
-
-- `memory_usage_bytes`: Использование памяти
-- `cpu_usage_percent`: Использование CPU
-
-### Cardinality Limits
-
-Метрики используют контролируемые наборы лейблов для предотвращения высокой кардинальности. Включаются только essential лейблы (model, operation, status).
-
-### Example Queries
+### Example queries
 
 ```promql
-# Среднее время ответа LLM за последний час
-rate(llm_latency_ms_sum[1h]) / rate(llm_latency_ms_count[1h])
+# Средняя латентность LLM (histogram)
+rate(llm_latency_ms_sum[5m]) / rate(llm_latency_ms_count[5m])
 
-# Количество успешных запусков за день
+# Успешные запуски за сутки
 increase(runs_total{status="ok"}[24h])
 
-# Использование токенов за последний час
-rate(llm_tokens_in_total[1h]) + rate(llm_tokens_out_total[1h])
-
-# Процент успешных обработок писем
-rate(emails_total{status="ok"}[1h]) / rate(emails_total[1h]) * 100
+# Письма с ошибкой нормализации/обработки (смотрите фактические значения label status)
+rate(emails_total{status="failed"}[5m])
 ```
 
-## Health Checks
+## Health checks
 
-### Endpoints
+Поднимаются из `run.py`: метрики на порту **`config.observability.prometheus_port`** (по умолчанию **9108**), HTTP health — на **9109** (сейчас **зашит** в `run.py`, не отдельная ENV-переменная).
 
-- **Health**: `http://localhost:9109/healthz`
-- **Readiness**: `http://localhost:9109/readyz`
+| Path | Порт | Назначение |
+|------|------|------------|
+| `/metrics` | 9108 | Prometheus scrape |
+| `/healthz` | 9109 | Liveness: процесс жив |
+| `/readyz` | 9109 | Readiness: проверка LLM gateway (если передан конфиг) |
 
-### Health Check Response
+### `/healthz` response
+
+Минимальный JSON (см. `healthz.py`):
 
 ```json
 {
   "status": "healthy",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "version": "1.0.0",
-  "checks": {
-    "ews_connectivity": "ok",
-    "llm_connectivity": "ok",
-    "disk_space": "ok"
-  }
+  "service": "digest-core",
+  "timestamp": 1710000000.123
 }
 ```
 
-### Custom Health Checks
+`timestamp` — число с плавающей точкой (`time.time()`), не ISO-строка. Полей `version` и вложенных `checks` **нет**.
+
+### `/readyz` response
+
+Содержит `service`, `checks` (как минимум `llm_gateway` со статусом), общий `status` (`ready` / `not_ready`), `timestamp`. Отдельных проверок `ews_connectivity` или `disk_space` в коде **нет**.
+
+Пример проверки:
 
 ```bash
-#!/bin/bash
-# health-check.sh
-
-# Check health endpoint
-if curl -f http://localhost:9109/healthz > /dev/null 2>&1; then
-    echo "Service is healthy"
-else
-    echo "Service is unhealthy"
-    exit 1
-fi
-
-# Check readiness
-if curl -f http://localhost:9109/readyz > /dev/null 2>&1; then
-    echo "Service is ready"
-else
-    echo "Service is not ready"
-    exit 1
-fi
+curl -sf http://localhost:9109/healthz
+curl -sf http://localhost:9109/readyz
 ```
 
 ## Logging
 
-### Structured JSON Logs
+- Логи: **structlog**, JSON.
+- Уровень задаётся флагом CLI **`--log-level`** при старте (`digest_core.cli run`), а не переменными `DIGEST_LOG_LEVEL` / `DIGEST_LOG_FORMAT` / `DIGEST_LOG_FILE` (они **не читаются** `logs.py`).
+- В цепочке обработки событий используется процессор **`_redact_sensitive_data`** — часть полей маскируется **локально** в логах; тела писем по-прежнему не следует логировать вручную.
 
-Логи через `structlog` с автоматическим скрытием PII:
-
-```json
-{
-  "event": "Digest run started",
-  "timestamp": "2024-01-15T10:30:00.123456Z",
-  "level": "info",
-  "trace_id": "abc123-def456",
-  "digest_date": "2024-01-15",
-  "user_id": "user@corp.com"
-}
-```
-
-### Log Levels
-
-- **DEBUG**: Детальная отладочная информация
-- **INFO**: Общая информация о работе
-- **WARNING**: Предупреждения о потенциальных проблемах
-- **ERROR**: Ошибки, требующие внимания
-
-### PII Policy
-
-Вся логика маскировки PII (emails, телефоны, имена, SSN, кредитные карты, IP адреса) обрабатывается LLM Gateway API. Локальная маскировка не выполняется. Тела сообщений никогда не логируются.
-
-### Log Configuration
-
-```bash
-# Set log level
-export DIGEST_LOG_LEVEL=DEBUG
-
-# Enable structured logging
-export DIGEST_LOG_FORMAT=json
-
-# Log to file
-export DIGEST_LOG_FILE=/var/log/digest-core.log
-```
-
-## Monitoring Setup
-
-### Prometheus Configuration
+## Prometheus scrape config
 
 ```yaml
-# prometheus.yml
 scrape_configs:
   - job_name: 'digest-core'
     static_configs:
@@ -152,40 +95,9 @@ scrape_configs:
     metrics_path: /metrics
 ```
 
-### Grafana Dashboard
-
-```json
-{
-  "dashboard": {
-    "title": "ActionPulse Dashboard",
-    "panels": [
-      {
-        "title": "LLM Response Time",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(llm_latency_ms_sum[5m]) / rate(llm_latency_ms_count[5m])"
-          }
-        ]
-      },
-      {
-        "title": "Email Processing Rate",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(emails_processed_total[5m])"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-### Alerting Rules
+## Alerting (примеры)
 
 ```yaml
-# alerting.yml
 groups:
   - name: digest-core
     rules:
@@ -196,176 +108,28 @@ groups:
           severity: critical
         annotations:
           summary: "Digest run failed"
-          
+
       - alert: HighLLMLatency
         expr: rate(llm_latency_ms_sum[5m]) / rate(llm_latency_ms_count[5m]) > 30000
         for: 10m
         labels:
           severity: warning
         annotations:
-          summary: "High LLM response time"
-          
-      - alert: LowEmailProcessing
-        expr: rate(emails_processed_total[1h]) < 1
-        for: 30m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Low email processing rate"
+          summary: "High LLM response time (check units: histogram is in ms)"
 ```
 
 ## Diagnostics
 
-### Environment Check
-
 ```bash
-# Run diagnostics
-./digest-core/scripts/print_env.sh
-
-# Or using make
+cd digest-core
 make env-check
+curl -s http://localhost:9108/metrics | head
 ```
 
-### Manual Diagnostics
-
-```bash
-# Check Prometheus metrics
-curl http://localhost:9108/metrics
-
-# Check specific metrics
-curl http://localhost:9108/metrics | grep digest_
-
-# Check health
-curl http://localhost:9109/healthz
-
-# Check readiness
-curl http://localhost:9109/readyz
-```
-
-### Log Analysis
-
-```bash
-# Enable debug logging
-DIGEST_LOG_LEVEL=DEBUG python -m digest_core.cli run --dry-run 2>&1 | tee debug.log
-
-# Check structured logs
-cat debug.log | jq .
-
-# Filter by trace_id
-cat debug.log | jq 'select(.trace_id == "abc123-def456")'
-
-# Count errors
-cat debug.log | jq 'select(.level == "error")' | wc -l
-```
-
-## Performance Monitoring
-
-### Resource Usage
-
-```bash
-# Monitor memory usage
-docker stats digest-core
-
-# Check disk usage
-du -sh /opt/digest/out
-du -sh /opt/digest/.state
-
-# Monitor network
-netstat -i
-```
-
-### Performance Metrics
-
-- **Memory Usage**: Мониторинг использования RAM
-- **CPU Usage**: Нагрузка на процессор
-- **Disk I/O**: Операции чтения/записи
-- **Network I/O**: Сетевой трафик
-
-### Optimization Tips
-
-- Уменьшите `lookback_hours` в config для снижения нагрузки
-- Увеличьте `page_size` для EWS пагинации
-- Мониторьте время ответа LLM Gateway
-- Настройте правильные таймауты
-
-## Troubleshooting
-
-### Common Issues
-
-#### Empty Digest
-
-```bash
-# Check time window settings
-grep -A 5 "time:" configs/config.yaml
-
-# Verify lookback hours
-grep "lookback_hours" configs/config.yaml
-
-# Test with dry-run
-python -m digest_core.cli run --dry-run
-```
-
-#### High Memory Usage
-
-```bash
-# Check memory metrics
-curl http://localhost:9108/metrics | grep memory_usage
-
-# Monitor with htop
-htop
-
-# Check Docker stats
-docker stats digest-core
-```
-
-#### Slow Processing
-
-```bash
-# Check LLM latency
-curl http://localhost:9108/metrics | grep llm_latency
-
-# Monitor network connectivity
-ping ews.corp.com
-ping llm-gw.corp.com
-```
-
-## Integration Examples
-
-### Slack Notifications
-
-```bash
-#!/bin/bash
-# slack-notify.sh
-
-if ! python -m digest_core.cli run; then
-    curl -X POST "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK" \
-         -H 'Content-type: application/json' \
-         --data '{
-           "text": "ActionPulse digest generation failed",
-           "attachments": [{
-             "color": "danger",
-             "fields": [{
-               "title": "Error",
-               "value": "Check logs for details"
-             }]
-           }]
-         }'
-fi
-```
-
-### Email Alerts
-
-```bash
-#!/bin/bash
-# email-alert.sh
-
-if ! python -m digest_core.cli run; then
-    echo "ActionPulse digest generation failed" | mail -s "Digest Alert" admin@corp.com
-fi
-```
+Подробнее: `python -m digest_core.cli diagnose`, `export-diagnostics` — см. `digest-core/CLAUDE.md`.
 
 ## See Also
 
-- [DEPLOYMENT.md](DEPLOYMENT.md) - Настройка развертывания
-- [AUTOMATION.md](AUTOMATION.md) - Настройка автоматизации
-- [digest-core/TROUBLESHOOTING.md](digest-core/TROUBLESHOOTING.md) - Детальное troubleshooting
+- [DEPLOYMENT.md](DEPLOYMENT.md)
+- [AUTOMATION.md](AUTOMATION.md)
+- [Troubleshooting](../troubleshooting/TROUBLESHOOTING.md)

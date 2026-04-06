@@ -179,13 +179,22 @@ class ConversationThread(NamedTuple):
     message_count: int
 ```
 
-**Logic:**
-- Group by `conversation_id` (EWS native)
-- Dedup by `msg_id` within thread
-- Max 50 messages per thread (truncate oldest)
-- Sort threads by `latest_message_time` DESC (most recent first)
+**Implementation:** `ThreadBuilder` in `threads/build.py` (not a bare group-by).
 
-**Invariant:** `sum(thread.message_count for all threads) == len(unique messages)`
+**Logic (high level):**
+1. **Dedup** messages by body checksum (duplicates tracked for diagnostics).
+2. **Thread assignment** (per message, first match wins):
+   - **Strategy 1:** EWS `conversation_id` → stable key `conv_<id>`.
+   - **Strategy 2:** `In-Reply-To` / `References` vs an index of seen `msg_id` → inherit parent thread.
+   - **Strategy 3:** **Normalized subject** → key `subj_<hash(normalized)>`; merge with existing thread if any message already shares the same normalized subject (see §4.4).
+   - **Fallback:** empty subject → `single_<msg_id>`.
+3. **Semantic merge pass:** threads that share a normalized subject may be merged when **body text similarity** exceeds `semantic_similarity_threshold` (default 0.7; `calculate_text_similarity` in `subject_normalizer.py`).
+4. **Caps:** max 50 messages per thread (oldest dropped).
+5. **Sort** threads by `latest_message_time` DESC.
+
+**Invariant:** `sum(thread.message_count for all threads) == len(unique messages)` (after dedup).
+
+**Types:** `ConversationThread` in code may carry `merged_by_semantic` and `duplicate_sources`; the NamedTuple above is the stable core fields used across stages.
 
 ---
 
@@ -446,6 +455,23 @@ File artifacts already written by Stage 7 — delivery is best-effort.
 **API sketch:**
 - `DigestRanker.rank_items(items, evidence_chunks)` → sorted list (highest `rank_score` first).
 - Project-tag detection uses regex union over `[JIRA-123]`, `[#456]`, etc.
+
+---
+
+### 4.4 `threads/subject_normalizer.py` — `SubjectNormalizer`
+
+**Purpose:** Produce a **canonical subject key** for threading when `conversation_id` and RFC822 reply headers are missing or insufficient. Pure regex/Unicode — no ML.
+
+**Primary API:**
+- `normalize(subject: str) -> (normalized_subject, original_subject)` — iteratively strips nested **Re:/Fwd:/Ответ:/Пересл:** (RU+EN), **(External)** markers, bracket/parenthesis **tags** (limited length), **emoji**, normalizes smart quotes and dashes, collapses whitespace, **lowercases**, applies **Unicode NFC**. Original string is returned untouched for display/logging; only the normalized form is used as a merge key inside `ThreadBuilder`.
+- `is_similar(a, b)` — equality of normalized forms.
+- `calculate_text_similarity` — lightweight character-level similarity used when merging threads that already share a normalized subject (semantic pass in **Stage 3: THREADS**, §4.2).
+
+**Call sites:** `ThreadBuilder` (`threads/build.py`) — subject-hash grouping, subject-based thread matching, and semantic-merge grouping (§4.2).
+
+**Pipeline status:** **In production path** — invoked during every `run` that builds threads (Stage 3). Unlike `DigestRanker` (§4.3 above), this module is **always** used when `ThreadBuilder` runs.
+
+**Tests:** `tests/test_threading.py` (and related threading tests).
 
 ---
 

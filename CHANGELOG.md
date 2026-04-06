@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Post-merge doc correction: `digest_core.cli setup` **does** exist (wizard); README/CHANGELOG no longer claim otherwise (follow-up to ACTPULSE-63 text).
 
+### Changed
+- `digest-core/docs/ARCHITECTURE.md`: expanded **Stage 3 (THREADS)** to match `ThreadBuilder` (`threads/build.py`); new **§4.4** documents `threads/subject_normalizer.py` / `SubjectNormalizer` (ACTPULSE-39).
+
 ## [1.1.0] - 2024-10-15
 
 ### ⚠️ BREAKING CHANGES

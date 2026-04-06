@@ -1,0 +1,204 @@
+"""Tests for the interactive setup wizard."""
+
+import yaml
+
+from digest_core.setup_wizard import (
+    _derive_from_email,
+    _read_existing_env,
+    _write_env_file,
+    _write_config_yaml,
+)
+
+
+class TestDeriveFromEmail:
+    """Test email -> EWS field derivation."""
+
+    def test_simple_email(self):
+        result = _derive_from_email("ivan.petrov@megacorp.ru")
+        assert result["user_login"] == "ivan.petrov"
+        assert result["user_domain"] == "megacorp.ru"
+        assert result["default_ews_endpoint"] == "https://owa.megacorp.ru/EWS/Exchange.asmx"
+        assert "Ivan" in result["aliases"]
+        assert "Petrov" in result["aliases"]
+        assert "ivan.petrov@megacorp.ru" in result["aliases"]
+        assert "ivan.petrov" in result["aliases"]
+
+    def test_single_part_login(self):
+        result = _derive_from_email("admin@corp.com")
+        assert result["user_login"] == "admin"
+        assert result["user_domain"] == "corp.com"
+        assert "Admin" in result["aliases"]
+        assert "admin@corp.com" in result["aliases"]
+
+    def test_hyphen_in_login(self):
+        result = _derive_from_email("ivan-petrov@corp.ru")
+        assert result["user_login"] == "ivan-petrov"
+        assert result["user_domain"] == "corp.ru"
+        assert "Ivan" in result["aliases"]
+        assert "Petrov" in result["aliases"]
+
+    def test_underscore_in_login(self):
+        result = _derive_from_email("i_petrov@corp.ru")
+        assert result["user_login"] == "i_petrov"
+        assert result["user_domain"] == "corp.ru"
+        # "i" is 1 char -> filtered out by len(p) > 1
+        assert "Petrov" in result["aliases"]
+
+
+class TestWriteEnvFile:
+    """Test env file generation."""
+
+    def test_writes_env_file(self, tmp_path, monkeypatch):
+        env_dir = tmp_path / ".config" / "actionpulse"
+        env_path = env_dir / "env"
+
+        monkeypatch.setattr("digest_core.setup_wizard.ENV_DIR", env_dir)
+        monkeypatch.setattr("digest_core.setup_wizard.ENV_PATH", env_path)
+
+        values = {
+            "EWS_PASSWORD": "secret123",
+            "EWS_USER_UPN": "test@corp.ru",
+            "EWS_ENDPOINT": "https://owa.corp.ru/EWS/Exchange.asmx",
+            "LLM_TOKEN": "tok-abc",
+            "LLM_ENDPOINT": "https://llm.corp.ru/api/v1/chat",
+            "MM_WEBHOOK_URL": "https://mm.corp.ru/hooks/xxx",
+        }
+        result = _write_env_file(values)
+
+        assert result.exists()
+        content = result.read_text()
+
+        # Check format: KEY=value, no export, no quotes
+        assert "EWS_PASSWORD=secret123" in content
+        assert "EWS_USER_UPN=test@corp.ru" in content
+        assert "LLM_TOKEN=tok-abc" in content
+        assert "MM_WEBHOOK_URL=https://mm.corp.ru/hooks/xxx" in content
+
+        # No export prefix
+        assert "export " not in content
+
+        # Check permissions (600)
+        mode = oct(result.stat().st_mode)[-3:]
+        assert mode == "600"
+
+    def test_systemd_compatible_format(self, tmp_path, monkeypatch):
+        """Env file must work with systemd EnvironmentFile=."""
+        env_dir = tmp_path / ".config" / "actionpulse"
+        env_path = env_dir / "env"
+        monkeypatch.setattr("digest_core.setup_wizard.ENV_DIR", env_dir)
+        monkeypatch.setattr("digest_core.setup_wizard.ENV_PATH", env_path)
+
+        _write_env_file({"EWS_PASSWORD": "p@ss w0rd!", "LLM_TOKEN": "tok"})
+        content = env_path.read_text()
+
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            # systemd format: KEY=value (no export, no quotes around value)
+            assert "=" in line
+            assert not line.startswith("export ")
+
+
+class TestWriteConfigYaml:
+    """Test config.yaml generation."""
+
+    def test_generates_valid_yaml(self, tmp_path, monkeypatch):
+        # Create a minimal example config
+        example = tmp_path / "config.example.yaml"
+        example_data = {
+            "ews": {
+                "endpoint": "https://placeholder",
+                "user_upn": "placeholder@corp.ru",
+                "user_login": "placeholder",
+                "user_domain": "corp.ru",
+                "verify_ca": "/etc/ssl/corp-ca.pem",
+                "user_aliases": [],
+            },
+            "llm": {
+                "endpoint": "https://placeholder",
+                "model": "qwen35-397b-a17b",
+            },
+        }
+        with open(example, "w") as f:
+            yaml.dump(example_data, f)
+
+        user_config = tmp_path / "config.yaml"
+        monkeypatch.setattr("digest_core.setup_wizard.CONFIG_EXAMPLE", example)
+        monkeypatch.setattr("digest_core.setup_wizard.CONFIG_USER", user_config)
+
+        derived = _derive_from_email("ivan@megacorp.ru")
+        result = _write_config_yaml(
+            user_upn="ivan@megacorp.ru",
+            ews_endpoint="https://owa.megacorp.ru/EWS/Exchange.asmx",
+            llm_endpoint="https://llm.megacorp.ru/api/v1/chat",
+            derived=derived,
+            verify_ca=None,
+        )
+
+        assert result.exists()
+        with open(result) as f:
+            config = yaml.safe_load(f)
+
+        assert config["ews"]["endpoint"] == "https://owa.megacorp.ru/EWS/Exchange.asmx"
+        assert config["ews"]["user_upn"] == "ivan@megacorp.ru"
+        assert config["ews"]["user_login"] == "ivan"
+        assert config["ews"]["user_domain"] == "megacorp.ru"
+        assert config["llm"]["endpoint"] == "https://llm.megacorp.ru/api/v1/chat"
+        # verify_ca=None -> removed from config
+        assert "verify_ca" not in config["ews"]
+
+    def test_preserves_ca_cert(self, tmp_path, monkeypatch):
+        example = tmp_path / "config.example.yaml"
+        example_data = {"ews": {"verify_ca": "/old/path"}, "llm": {}}
+        with open(example, "w") as f:
+            yaml.dump(example_data, f)
+
+        user_config = tmp_path / "config.yaml"
+        monkeypatch.setattr("digest_core.setup_wizard.CONFIG_EXAMPLE", example)
+        monkeypatch.setattr("digest_core.setup_wizard.CONFIG_USER", user_config)
+
+        derived = _derive_from_email("user@corp.ru")
+        _write_config_yaml(
+            user_upn="user@corp.ru",
+            ews_endpoint="https://ews.corp.ru",
+            llm_endpoint="https://llm.corp.ru",
+            derived=derived,
+            verify_ca="/etc/ssl/my-ca.pem",
+        )
+
+        with open(user_config) as f:
+            config = yaml.safe_load(f)
+        assert config["ews"]["verify_ca"] == "/etc/ssl/my-ca.pem"
+
+
+class TestReadExistingEnv:
+    """Test reading existing env files for defaults."""
+
+    def test_reads_key_value(self, tmp_path, monkeypatch):
+        env_file = tmp_path / "env"
+        env_file.write_text("EWS_PASSWORD=secret\nLLM_TOKEN=tok\n# comment\n\n")
+        monkeypatch.setattr("digest_core.setup_wizard.ENV_PATH", env_file)
+
+        result = _read_existing_env()
+        assert result["EWS_PASSWORD"] == "secret"
+        assert result["LLM_TOKEN"] == "tok"
+
+    def test_missing_file(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("digest_core.setup_wizard.ENV_PATH", tmp_path / "nonexistent")
+        result = _read_existing_env()
+        assert result == {}
+
+
+class TestSetupCommand:
+    """Test the CLI setup command integration."""
+
+    def test_cli_help_includes_setup(self):
+        """Verify setup command is registered in CLI."""
+        from typer.testing import CliRunner
+        from digest_core.cli import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["setup", "--help"])
+        assert result.exit_code == 0
+        assert "setup" in result.output.lower() or "interactive" in result.output.lower()

@@ -8,6 +8,9 @@ setup:
 		echo "⚠ Native TLS failed, trying standard sync..."; \
 		uv sync; \
 	fi
+	@echo ""
+	@echo "Running interactive setup..."
+	@uv run python -m digest_core.cli setup
 
 test:
 	PYTHONPATH=src uv run pytest tests/ -v

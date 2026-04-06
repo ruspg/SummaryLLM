@@ -12,20 +12,15 @@ git clone https://github.com/ruspg/ActionPulse.git
 cd ActionPulse/digest-core
 uv sync --native-tls
 
-# 2. Secrets
-mkdir -p ~/.config/actionpulse
-cp deploy/env.example ~/.config/actionpulse/env
-chmod 600 ~/.config/actionpulse/env
-nano ~/.config/actionpulse/env          # fill in real values
+# 2. Interactive setup (6 questions, generates env + config.yaml)
+python -m digest_core.cli setup
 
-# 3. Config
-cp configs/config.example.yaml configs/config.yaml
-nano configs/config.yaml                # change lines marked <-- CHANGE
-
-# 4. Verify
+# 3. Verify
 set -a && source ~/.config/actionpulse/env && set +a
 python -m digest_core.cli diagnose
 ```
+
+Or as a single command: `make setup` (installs deps + runs interactive setup).
 
 ## Usage
 

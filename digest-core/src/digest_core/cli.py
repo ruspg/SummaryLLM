@@ -260,6 +260,21 @@ def export_diagnostics_command(
         sys.exit(1)
 
 
+@app.command()
+def setup():
+    """Interactive setup: configure ActionPulse in 6 questions, no text editor needed.
+
+    Generates:
+      - ~/.config/actionpulse/env   (secrets, systemd-compatible)
+      - configs/config.yaml         (pipeline config with your values)
+
+    Safe to re-run — reads existing values as defaults.
+    """
+    from digest_core.setup_wizard import run_setup
+
+    run_setup()
+
+
 @app.command("eval-prompt")
 def eval_prompt(
     digest: str = typer.Option(..., "--digest", help="Path to digest-YYYY-MM-DD.json to evaluate"),

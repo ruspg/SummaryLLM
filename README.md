@@ -39,7 +39,7 @@ python -m digest_core.cli run --dry-run
 python -m digest_core.cli run
 ```
 
-Мастер задаст: корпоративный email, EWS endpoint, EWS пароль, LLM endpoint, LLM токен, Mattermost webhook URL. Сгенерирует `~/.config/actionpulse/env` (chmod 600) и `configs/config.yaml`. Повторная настройка: снова `make setup` из каталога `digest-core/` (отдельной команды `digest_core.cli setup` нет).
+Мастер задаст: корпоративный email, EWS endpoint, EWS пароль, LLM endpoint, LLM токен, Mattermost webhook URL. Сгенерирует `~/.config/actionpulse/env` (chmod 600) и `configs/config.yaml`. Повторная настройка: `make setup` или напрямую `python -m digest_core.cli setup` из `digest-core/` (оба вызывают один и тот же wizard).
 
 ### Mattermost интеграция (важно)
 ActionPulse использует **incoming webhook** Mattermost для **доставки** готового дайджеста (Stage 8). Для чтения сообщений/DM пассивно собирать данные не требуется — в MVP не используется API/WebSocket “для чтения”.

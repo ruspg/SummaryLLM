@@ -1,6 +1,6 @@
 # digest-core
 
-Python 3.11 package. Daily email digest pipeline: EWS → normalize → threads → evidence → LLM → assemble → deliver (MM DM).
+Python 3.11 package. Daily email digest pipeline: EWS → normalize → threads → evidence → LLM → assemble → deliver (Mattermost incoming webhook).
 
 ## Commands
 
@@ -91,9 +91,9 @@ make test    # All tests use mocks, run anywhere
 |------|---------|
 | `0` | Success — full run or `--dry-run` completed without errors |
 | `1` | Error — unhandled exception, missing required ENV, pipeline crash, `KeyboardInterrupt` |
-| `2` | Citation validation failed — only emitted when `--validate-citations` is passed and one or more items fail the evidence_id check |
+| `2` | **Reserved** for citation-validation failures when `--validate-citations` is passed — the CLI checks this path, but **`run.py` does not yet run citation validation**, so a successful run still returns `0` today. See `docs/development/CITATIONS.md` (2026-04 note). |
 
-`--dry-run` exits `0` (not `2`) — it is a complete success for its stated purpose (ingest + normalize only). Code `2` is reserved exclusively for `--validate-citations` failures.
+`--dry-run` exits `0` (not `2`) — it is a complete success for its stated purpose (ingest + normalize only).
 
 ## Gotchas
 
@@ -118,8 +118,7 @@ MM_WEBHOOK_URL=...        # Mattermost incoming webhook URL
 
 # Optional
 DIGEST_CONFIG_PATH=...    # Custom config YAML path
-DIGEST_OUT_DIR=...        # Override output directory
-DIGEST_STATE_DIR=...      # Override state directory
+# Output/state: use CLI flags --out and --state (not separate DIGEST_* env vars in current code)
 ```
 
 ## Offline Development (outside corp network)

@@ -87,7 +87,7 @@ def run(
             )
             exit_code = 0  # Dry-run completed successfully
         else:
-            citation_validation_passed = run_digest(
+            run_result = run_digest(
                 from_date,
                 sources.split(","),
                 out,
@@ -103,7 +103,7 @@ def run(
             )
 
             # Exit with code 2 if citation validation failed
-            if validate_citations and not citation_validation_passed:
+            if validate_citations and not run_result.citation_validation_ok:
                 typer.echo("⚠ Citation validation failed", err=True)
                 exit_code = 2
             else:

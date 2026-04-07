@@ -21,13 +21,15 @@ import uuid
 import structlog
 
 from digest_core.assemble.markdown import MarkdownAssembler
-from digest_core.config import Config
+from digest_core.config import Config, RankerConfig
 from digest_core.deliver.mattermost import MattermostDeliverer
+from digest_core.evidence.citations import CitationBuilder, CitationValidator
 from digest_core.evidence.split import EvidenceChunk, EvidenceSplitter
 from digest_core.ingest.ews import EWSIngest, NormalizedMessage
 from digest_core.llm.gateway import LLMGateway
 from digest_core.llm.prompt_registry import get_prompt_template_path
-from digest_core.llm.schemas import Digest
+from digest_core.llm.schemas import Digest, Section
+from digest_core.select.ranker import DigestRanker
 from digest_core.normalize.html import HTMLNormalizer
 from digest_core.normalize.quotes import QuoteCleaner
 from digest_core.observability.healthz import start_health_server
@@ -42,6 +44,23 @@ PROMPTS_DIR = PACKAGE_ROOT / "prompts"
 SECTION_ORDER = {"Мои действия": 0, "Срочное": 1, "К сведению": 2}
 
 logger = structlog.get_logger()
+
+
+# ---------------------------------------------------------------------------
+# Run result (CLI and programmatic callers)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RunDigestResult:
+    """Outcome of ``run_digest`` (full pipeline, non-dry-run)."""
+
+    pipeline_succeeded: bool = True
+    citation_validation_ok: bool = True
+
+    def __bool__(self) -> bool:
+        """Truthiness matches pipeline success (use ``assert run_digest(...)``, not ``is True``)."""
+        return self.pipeline_succeeded
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +109,7 @@ def run_digest(
     replay_ingest: str | None = None,
     record_llm: str | None = None,
     replay_llm: str | None = None,
-) -> bool:
+) -> RunDigestResult:
     """Run the complete digest pipeline."""
     return _run_pipeline(
         from_date=from_date,
@@ -191,6 +210,7 @@ def _init_context(
         "digest_date": digest_date,
         "dry_run": dry_run,
         "validate_citations": validate_citations,
+        "citation_validation_ok": True,
         "log_file": str(log_file) if log_file else None,
         "output_dir": str(output_dir),
         "artifact_paths": {"json": str(json_path), "md": str(md_path)},
@@ -385,6 +405,123 @@ def _stage_llm(
     return digest, llm_error
 
 
+def _ranker_weights_from_config(ranker_cfg: RankerConfig) -> Dict[str, float]:
+    return {
+        "user_in_to": ranker_cfg.weight_user_in_to,
+        "user_in_cc": ranker_cfg.weight_user_in_cc,
+        "has_action": ranker_cfg.weight_has_action,
+        "has_mention": ranker_cfg.weight_has_mention,
+        "has_due_date": ranker_cfg.weight_has_due_date,
+        "sender_importance": ranker_cfg.weight_sender_importance,
+        "thread_length": ranker_cfg.weight_thread_length,
+        "recency": ranker_cfg.weight_recency,
+        "has_attachments": ranker_cfg.weight_has_attachments,
+        "has_project_tag": ranker_cfg.weight_has_project_tag,
+    }
+
+
+def _ranker_user_aliases(config: Config) -> List[str]:
+    aliases = [a for a in (config.ews.user_aliases or []) if a]
+    upn = (config.ews.user_upn or "").strip()
+    if upn and upn not in aliases:
+        aliases.append(upn)
+    return aliases
+
+
+def _maybe_rank_digest(
+    ctx: RunContext, digest: Digest, selected_evidence: List[EvidenceChunk]
+) -> Digest:
+    if not ctx.config.ranker.enabled:
+        return digest
+    rc = ctx.config.ranker
+    ranker = DigestRanker(
+        weights=_ranker_weights_from_config(rc),
+        user_aliases=_ranker_user_aliases(ctx.config),
+        important_senders=rc.important_senders,
+    )
+    new_sections: List[Section] = []
+    for section in digest.sections:
+        ranked = ranker.rank_items(list(section.items), selected_evidence)
+        new_sections.append(Section(title=section.title, items=ranked))
+        if rc.log_positions:
+            logger.info(
+                "Ranked digest section",
+                trace_id=ctx.trace_id,
+                section_title=section.title,
+                order=[getattr(i, "evidence_id", None) for i in ranked],
+            )
+    return digest.model_copy(update={"sections": new_sections})
+
+
+def _apply_citation_validation(
+    digest: Digest,
+    normalized_messages: Sequence[NormalizedMessage],
+    selected_evidence: Sequence[EvidenceChunk],
+) -> tuple[Digest, bool]:
+    """Rebuild citations from selected evidence and validate offsets (strict)."""
+    msg_map = {m.msg_id: m.text_body for m in normalized_messages if m.msg_id}
+    builder = CitationBuilder(msg_map)
+    validator = CitationValidator(msg_map)
+
+    needs_citations = False
+    for section in digest.sections:
+        for item in section.items:
+            if item.evidence_id != "system":
+                needs_citations = True
+                break
+        if needs_citations:
+            break
+
+    if not needs_citations:
+        return digest, True
+
+    all_ok = True
+    new_sections: List[Section] = []
+    for section in digest.sections:
+        new_items = []
+        for item in section.items:
+            if item.evidence_id == "system":
+                new_items.append(item)
+                continue
+            chunks = [c for c in selected_evidence if c.evidence_id == item.evidence_id]
+            if not chunks:
+                all_ok = False
+                new_items.append(item)
+                continue
+            citations = []
+            for ch in chunks:
+                cit = builder.build_citation(ch)
+                if cit:
+                    citations.append(cit)
+            if not citations:
+                all_ok = False
+                new_items.append(item)
+                continue
+            if not validator.validate_citations(citations, strict=False):
+                all_ok = False
+            new_items.append(item.model_copy(update={"citations": citations}))
+        new_sections.append(Section(title=section.title, items=new_items))
+
+    return digest.model_copy(update={"sections": new_sections}), all_ok
+
+
+def _post_llm_digest_enrichment(
+    ctx: RunContext,
+    digest: Digest,
+    normalized_messages: List[NormalizedMessage],
+    selected_evidence: List[EvidenceChunk],
+) -> tuple[Digest, bool]:
+    citation_ok = True
+    if ctx.validate_citations:
+        digest, citation_ok = _apply_citation_validation(
+            digest, normalized_messages, selected_evidence
+        )
+        if not citation_ok:
+            ctx.metrics.record_citation_validation_failure("post_llm_offsets")
+    digest = _maybe_rank_digest(ctx, digest, selected_evidence)
+    return digest, citation_ok
+
+
 def _stage_assemble(ctx: RunContext, digest: Digest) -> None:
     """Stage 7: ASSEMBLE — write JSON and Markdown artifacts."""
     assemble_start = time.perf_counter()
@@ -429,7 +566,7 @@ def _run_pipeline(
     replay_ingest: str | None,
     record_llm: str | None = None,
     replay_llm: str | None = None,
-) -> bool:
+) -> RunDigestResult:
     """Run the digest pipeline with shared setup for normal and dry-run modes."""
     ctx = _init_context(
         from_date=from_date,
@@ -458,7 +595,7 @@ def _run_pipeline(
         ctx.run_meta["status"] = "skipped"
         ctx.run_meta["pipeline_metrics"] = {"artifact_age_hours": artifact_age_hours}
         _write_json(ctx.metadata_path, ctx.run_meta)
-        return True
+        return RunDigestResult(True, True)
 
     logger.info(
         "Starting digest run",
@@ -511,10 +648,15 @@ def _run_pipeline(
                 evidence_chunks=len(evidence_chunks),
                 selected_evidence=len(selected_evidence),
             )
-            return True
+            return RunDigestResult(True, True)
 
         # Stage 6: LLM
         digest, llm_error = _stage_llm(ctx, selected_evidence)
+
+        digest, citation_ok = _post_llm_digest_enrichment(
+            ctx, digest, normalized_messages, selected_evidence
+        )
+        ctx.run_meta["citation_validation_ok"] = citation_ok
 
         # Stage 7: ASSEMBLE
         _stage_assemble(ctx, digest)
@@ -542,7 +684,7 @@ def _run_pipeline(
             total_items=_count_digest_items(digest),
             partial=ctx.run_meta["partial"],
         )
-        return True
+        return RunDigestResult(True, citation_ok)
     except Exception as exc:
         ctx.metrics.record_run_total("failed")
         ctx.run_meta["status"] = "failed"

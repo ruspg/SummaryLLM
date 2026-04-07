@@ -9,7 +9,9 @@
 >
 > - Pydantic-валидация LLM output на каждом запуске (см.
 >   [`llm/schemas.py`](../../digest-core/src/digest_core/llm/schemas.py))
-> - Citation validation через `--validate-citations` (exit code 2 при failures)
+> - Citation validation через `--validate-citations`: цитаты собираются из выбранных
+>   evidence-чанков и проверяются по нормализованному телу письма; при ошибке —
+>   exit code 2, в `trace-*.meta.json` поле `citation_validation_ok: false`
 > - Counter-метрики (не quality scores): `actions_found_total`, `mentions_found_total`,
 >   `actions_confidence_histogram`, `citation_validation_failures_total`
 > - Quality retry на пустые секции при наличии positive evidence (см. ADR-008)

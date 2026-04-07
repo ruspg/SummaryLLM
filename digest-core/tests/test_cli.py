@@ -7,6 +7,7 @@ import httpx
 import pytest
 from unittest.mock import patch
 from digest_core.cli import app
+from digest_core.run import RunDigestResult
 from typer.testing import CliRunner
 
 
@@ -67,7 +68,7 @@ def test_cli_run_dry_run(runner):
 def test_cli_run_success(runner):
     """Test CLI run success path."""
     with patch("digest_core.cli.run_digest") as mock_run:
-        mock_run.return_value = None
+        mock_run.return_value = RunDigestResult(True, True)
 
         result = runner.invoke(
             app,
@@ -89,10 +90,35 @@ def test_cli_run_success(runner):
         mock_run.assert_called_once()
 
 
+def test_cli_run_validate_citations_exit_2_when_validation_fails(runner):
+    """Exit code 2 when --validate-citations and pipeline reports citation failure."""
+    with patch("digest_core.cli.run_digest") as mock_run:
+        mock_run.return_value = RunDigestResult(True, False)
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--from-date",
+                "2024-01-15",
+                "--sources",
+                "ews",
+                "--out",
+                "/tmp/test",
+                "--model",
+                "qwen35-397b-a17b",
+                "--validate-citations",
+            ],
+        )
+
+        assert result.exit_code == 2
+        mock_run.assert_called_once()
+
+
 def test_cli_run_with_window(runner):
     """Test CLI run with window parameter."""
     with patch("digest_core.cli.run_digest") as mock_run:
-        mock_run.return_value = None
+        mock_run.return_value = RunDigestResult(True, True)
 
         result = runner.invoke(
             app,
@@ -118,7 +144,7 @@ def test_cli_run_with_window(runner):
 def test_cli_run_with_state(runner):
     """Test CLI run with state parameter."""
     with patch("digest_core.cli.run_digest") as mock_run:
-        mock_run.return_value = None
+        mock_run.return_value = RunDigestResult(True, True)
 
         result = runner.invoke(
             app,
@@ -181,7 +207,7 @@ def test_cli_run_missing_required_args(runner):
 def test_cli_run_multiple_sources(runner):
     """Test CLI run with multiple sources."""
     with patch("digest_core.cli.run_digest") as mock_run:
-        mock_run.return_value = None
+        mock_run.return_value = RunDigestResult(True, True)
 
         result = runner.invoke(
             app,
@@ -230,7 +256,7 @@ def test_cli_run_exception_handling(runner):
 def test_cli_run_config_loading(runner):
     """Test CLI run forwards normalized arguments to the pipeline entrypoint."""
     with patch("digest_core.cli.run_digest") as mock_run:
-        mock_run.return_value = None
+        mock_run.return_value = RunDigestResult(True, True)
 
         result = runner.invoke(
             app,
@@ -261,7 +287,7 @@ def test_cli_run_logging(runner):
     """Test CLI run logging setup."""
     with patch("digest_core.cli.setup_logging") as mock_logging:
         with patch("digest_core.cli.run_digest") as mock_run:
-            mock_run.return_value = None
+            mock_run.return_value = RunDigestResult(True, True)
 
             result = runner.invoke(
                 app,

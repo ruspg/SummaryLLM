@@ -338,6 +338,11 @@ Typical run: 1 HTTP call.
 - Context window: must fit configured evidence budget (`context_budget.max_total_tokens`, default 7000) + system prompt + completion headroom.
   No second-round chunking of the **HTTP** request beyond Stage 4/5 (single messages payload).
 
+**Post-LLM steps (still in `run.py`, before Stage 7):**
+
+- **`--validate-citations`:** rebuild `Item.citations` from **selected** `EvidenceChunk`s via `CitationBuilder`, validate with `CitationValidator` against normalized bodies (`msg_id` → `text_body` map). On any failure for a non-`system` item, `citation_validation_ok` is false; CLI exits **2** after assemble/deliver. Partial digests (`evidence_id: system`) and empty digests skip the requirement.
+- **`ranker.enabled`:** optional `DigestRanker.rank_items` per section (default **off**; see §4.3).
+
 ---
 
 #### Stage 7: ASSEMBLE
@@ -474,7 +479,7 @@ File artifacts already written by Stage 7 — delivery is best-effort.
 
 **Config:** `RankerConfig` is mounted on the root `Config` model as `config.ranker` (YAML key `ranker`). ENV overrides follow the generic nested rule `DIGEST_<PREFIX>_<FIELD>` with `PREFIX=RANKER` (e.g. `DIGEST_RANKER_ENABLED`, `DIGEST_RANKER_WEIGHT_USER_IN_TO`) — see `_merge_model` in `config.py` and §5.
 
-**Pipeline status (MVP):** `digest_core/run.py` **does not import or call** `DigestRanker`. Stage 5 remains `select/context.py` (evidence chunk selection). The ranker is covered by unit tests (`tests/test_ranker.py`) and is available for **future** integration (e.g. reordering `Digest` items before assemble) or offline experiments — do not assume it affects production output until wired explicitly.
+**Pipeline status:** When **`config.ranker.enabled`** is `true`, `digest_core/run.py` calls **`DigestRanker`** after Stage 6 (LLM), **per section**, to reorder v1 **`Digest`** items by `rank_score` before Stage 7 (assemble). Default in **`RankerConfig`** is **`enabled: false`** — production output order is unchanged unless the flag is turned on. Stage 5 evidence selection remains **`select/context.py`** (`ContextSelector`); the ranker only reorders **extracted items**, not chunks. Unit tests: `tests/test_ranker.py`.
 
 **API sketch:**
 - `DigestRanker.rank_items(items, evidence_chunks)` → sorted list (highest `rank_score` first).
@@ -493,7 +498,7 @@ File artifacts already written by Stage 7 — delivery is best-effort.
 
 **Call sites:** `ThreadBuilder` (`threads/build.py`) — subject-hash grouping, subject-based thread matching, and semantic-merge grouping (**#### Stage 3: THREADS** в §4.2 выше).
 
-**Pipeline status:** **In production path** — invoked during every `run` that builds threads (Stage 3). Unlike `DigestRanker` (§4.3 above), this module is **always** used when `ThreadBuilder` runs.
+**Pipeline status:** **In production path** — invoked during every `run` that builds threads (Stage 3). В отличие от **опционального** `DigestRanker` (§4.3), этот модуль **всегда** задействован, когда выполняется `ThreadBuilder`.
 
 **Tests:** `tests/test_threading.py` (and related threading tests).
 
@@ -626,7 +631,7 @@ observability:
 | Email cleaner | `email_cleaner_removed_chars_total`, `email_cleaner_removed_blocks_total`, `cleaner_errors_total` |
 | Citations / actions | `citations_per_item_histogram`, `citation_validation_failures_total`, `actions_found_total`, `mentions_found_total`, `actions_confidence_histogram`, `actions_sender_missing_total` |
 | Threading | `threads_merged_total`, `subject_normalized_total`, `duplicates_found_total`, `redundancy_index` (Gauge) |
-| Ranking (`DigestRanker`) | `rank_score_histogram`, `top10_actions_share`, `ranking_enabled` — **§4.3:** `run.py` ранкер **не вызывает**; значения в Prometheus в основном из тестов или будущей проводки |
+| Ranking (`DigestRanker`) | `rank_score_histogram`, `top10_actions_share`, `ranking_enabled` — **§4.3:** `run.py` вызывает ранкер только при **`ranker.enabled`**; отдельные ranking-метрики в Prometheus по-прежнему могут не инкрементиться из daily `run` (проверять `metrics.py` / вызовы `record_*`) |
 | Hierarchical | `hierarchical_runs_total`, `avg_subsummary_chunks`, `saved_tokens_total`, `must_include_chunks_total` — не дефолтный daily `run` |
 | HTML normalize | `html_parse_errors_total`, `html_hidden_removed_total` |
 | Прочее | `validation_error_total`, `tz_naive_total`, `system_uptime_seconds`, `memory_usage_bytes` |
@@ -673,6 +678,8 @@ run_digest("2026-03-29", ...)
 
 **Override:** флаг CLI `--force` обходит проверку идемпотентности (пересборка даже при «свежих» артефактах).
 
+**Return value:** успешный вызов `run_digest()` возвращает **`RunDigestResult`** (не `bool`): для проверки успеха используйте truthiness объекта; для гейта цитат при `--validate-citations` смотрите **`citation_validation_ok`**.
+
 **Known limitation:** Race condition при параллельных запусках. Два процесса
 (`cron` overlap, manual + cron) могут оба пройти проверку `json_path.exists()` и
 оба записать файл. Для single-user CLI маловероятно. Если станет проблемой —
@@ -703,7 +710,7 @@ run_digest("2026-03-29", ...)
 | **8. Deliver** | MM webhook unreachable | `logger.warning()`, exit 0. Файлы уже сохранены | OK (ADR-011, `mattermost.py`) |
 | **8. Deliver** | MM message too long (>16383) | Дробление на несколько сообщений | OK (`MattermostDeliverer`) |
 | **8. Deliver** | MM webhook returns 4xx | Warning / лог; без ретрая (конфиг) | OK |
-| **CLI** | `--validate-citations` | Флаг попадает в `run_meta`; **валидация цитат в `run.py` не выполняется**; exit **2** из `cli.py` для провала цитат сегодня **недостижим**. См. `docs/development/CITATIONS.md`, `digest-core/CLAUDE.md` (CLI exit codes). | Запланировано: проводка + exit 2 при fail |
+| **CLI** | `--validate-citations` | После LLM: цитаты пересобираются из **выбранных** evidence-чанков, проверяются `CitationValidator`; результат в JSON пунктов; `run_meta.citation_validation_ok`; при провале CLI exit **2** (артефакты уже записаны). См. `docs/development/CITATIONS.md`, `digest-core/CLAUDE.md`. | OK (Phase 0) |
 
 **Partial report format (при сбое LLM):**
 
@@ -865,7 +872,7 @@ digest-core/
 │   │   ├── split.py               # Evidence chunking (`EvidenceChunk`, `EvidenceSplitter`)
 │   │   ├── signals.py             # Heuristic signals on text
 │   │   ├── actions.py             # Action / mention extraction helpers
-│   │   ├── citations.py           # Citation validation / builder (not wired in default `run.py`)
+│   │   ├── citations.py           # CitationBuilder / CitationValidator (wired when `--validate-citations`)
 │   │   └── lemmatizer.py          # RU lemmatization for NLP-style helpers
 │   ├── select/
 │   │   └── context.py             # Context selection/scoring

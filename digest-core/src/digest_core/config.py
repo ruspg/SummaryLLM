@@ -363,7 +363,10 @@ class NLPConfig(BaseModel):
 class RankerConfig(BaseModel):
     """Configuration for digest item ranking."""
 
-    enabled: bool = Field(default=True, description="Enable ranking of digest items")
+    enabled: bool = Field(
+        default=False,
+        description="Enable post-LLM reordering of items via DigestRanker (per section)",
+    )
 
     # Feature weights (will be normalized to sum to 1.0)
     weight_user_in_to: float = Field(

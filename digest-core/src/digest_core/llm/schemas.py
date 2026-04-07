@@ -34,6 +34,10 @@ class Item(BaseModel):
     citations: List[Citation] = Field(
         default_factory=list, description="Evidence citations with validated offsets"
     )
+    rank_score: Optional[float] = Field(
+        default=None,
+        description="Rule-based actionability score from DigestRanker (0..1)",
+    )
 
 
 class Section(BaseModel):

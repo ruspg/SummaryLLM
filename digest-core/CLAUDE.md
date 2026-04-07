@@ -91,9 +91,11 @@ make test    # All tests use mocks, run anywhere
 |------|---------|
 | `0` | Success — full run or `--dry-run` completed without errors |
 | `1` | Error — unhandled exception, missing required ENV, pipeline crash, `KeyboardInterrupt` |
-| `2` | **Reserved** for citation-validation failures when `--validate-citations` is passed — the CLI checks this path, but **`run.py` does not yet run citation validation**, so a successful run still returns `0` today. See `docs/development/CITATIONS.md` (2026-04 note). |
+| `2` | Citation validation failed — only when **`--validate-citations`** is set and post-LLM citation build/validate fails (`RunDigestResult.citation_validation_ok` is false). Pipeline still writes artifacts; CI should treat `2` as a quality gate failure. |
 
 `--dry-run` exits `0` (not `2`) — it is a complete success for its stated purpose (ingest + normalize only).
+
+**Programmatic API:** `run_digest(...)` returns **`RunDigestResult`**, not `bool`. Use `if run_digest(...):` or `assert run_digest(...)` for pipeline success; inspect `.citation_validation_ok` when using `--validate-citations`.
 
 ## Gotchas
 

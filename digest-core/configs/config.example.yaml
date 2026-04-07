@@ -152,7 +152,7 @@ nlp:
     замержьте: замержить
 
 ranker:
-  enabled: true              # Enable ranking of digest items
+  enabled: false             # Set true to reorder items per section (DigestRanker)
   # Feature weights (will be normalized to sum to 1.0)
   weight_user_in_to: 0.15    # User is direct recipient (To)
   weight_user_in_cc: 0.05    # User is CC recipient

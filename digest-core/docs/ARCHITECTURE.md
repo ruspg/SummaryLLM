@@ -88,11 +88,11 @@ EWS Inbox
 │3.THREADS │──────────────────────────┐
 └──────────┘                          │
     │                                 ▼
-┌──────────┐   EvidenceChunk[]  (all, ≤3000 tokens total — BUDGET OWNER)
+┌──────────┐   EvidenceChunk[]  (sorted by priority, truncated ≤ max_total_tokens — default 7000)
 │4.EVIDENCE│──────────────────────────┐
 └──────────┘                          │
     │                                 ▼
-┌──────────┐   EvidenceChunk[]  (re-ranked top-20, NO token enforcement)
+┌──────────┐   EvidenceChunk[]  (bucket-balanced subset, same token budget + optional shrink)
 │ 5.SELECT │──────────────────────────┐
 └──────────┘                          │
     │                                 ▼
@@ -201,23 +201,37 @@ class ConversationThread(NamedTuple):
 #### Stage 4: EVIDENCE SPLIT
 
 **Input:** `List[ConversationThread]`
-**Output:** `List[EvidenceChunk]` (all chunks, sorted by priority_score DESC)
+**Output:** `List[EvidenceChunk]` — все порождённые чанки сортируются по **`priority_score` DESC**, затем **`EvidenceSplitter._limit_total_tokens`** оставляет префикс списка, укладывающийся в **`context_budget.max_total_tokens`**. На выходе Stage 4 **нет** «полного» набора чанков до бюджета — только усечённый.
+
+**Type (actual code: `@dataclass` in `evidence/split.py`, not a narrow NamedTuple):**
 
 ```python
-class EvidenceChunk(NamedTuple):
-    evidence_id: str          # UUID4
-    conversation_id: str
-    content: str              # Text content of chunk
-    source_ref: Dict[str, Any]  # {type, msg_id, conversation_id, message_index, chunk_index}
-    token_count: int          # Estimated tokens (words * 1.3)
-    priority_score: float     # Heuristic priority score
+@dataclass
+class EvidenceChunk:
+    evidence_id: str
+    conversation_id: str = ""
+    content: str = ""              # primary body; synced with `text` in __post_init__
+    text: str = ""
+    source_ref: Dict[str, Any] = field(default_factory=dict)
+    msg_id: str = ""
+    token_count: int = 0           # heuristic: words * 1.3
+    priority_score: float = 0.0
+    message_metadata: Dict[str, Any] = field(default_factory=dict)
+    addressed_to_me: bool = False
+    user_aliases_matched: List[str] = field(default_factory=list)
+    signals: Dict[str, Any] = field(default_factory=dict)
+    chunk_idx: int = 0
+    total_chunks: int = 1
+    timestamp: str = ""
+    sender: str = ""
+    thread_id: str = ""            # legacy / back-compat with older tests
 ```
 
-**Token budget constraints:**
-- `max_tokens_per_chunk`: 512
-- `min_tokens_per_chunk`: 64
-- `max_chunks_per_message`: 12
-- `max_total_tokens`: 3000 (entire LLM call budget)
+**Token / chunking (see `ContextBudgetConfig`, `ChunkingConfig` in `config.py`; YAML `context_budget`, `chunking`; ENV e.g. `DIGEST_CTX_BUDGET_MAX_TOTAL_TOKENS`, `DIGEST_CHUNKING_*` — §5):**
+- `max_tokens_per_chunk`: 512 (default)
+- `min_tokens_per_chunk`: 64 (default)
+- **`max_total_tokens`:** default **7000** (`ContextBudgetConfig`), not a hard-coded 3000
+- Per-message chunk cap: **`ChunkingConfig`** — `max_chunks_default` (12) with reduced caps for long messages (`max_chunks_if_long`, default 3) and optional adaptive scaling under high load
 
 **Splitting strategy:**
 1. Split by paragraphs (`\n\n`)
@@ -235,31 +249,25 @@ class EvidenceChunk(NamedTuple):
 
 #### Stage 5: CONTEXT SELECTION
 
-**Input:** `List[EvidenceChunk]` (token-budgeted by Stage 4)
-**Output:** `List[EvidenceChunk]` (re-ranked, top-20 by relevance score)
+**Input:** `List[EvidenceChunk]` (already truncated by Stage 4 to ≤ `context_budget.max_total_tokens`)
+**Output:** `List[EvidenceChunk]` — подмножество после перескоринга, **balanced bucket selection** с тем же лимитом токенов и (если включено) **auto-shrink**
 
 > **Token budget responsibility:**
-> Stage 5 **НЕ** является budget owner. Токенный бюджет (≤3000) контролируется
-> **Stage 4** (`EvidenceSplitter._limit_total_tokens`). Stage 5 только ре-ранжирует
-> и может уменьшить количество чанков, но не увеличить суммарный бюджет.
+> Один лимит **`context_budget.max_total_tokens`** (default **7000**, см. `ContextBudgetConfig`) применяется **последовательно на двух стадиях**:
+> 1. **Stage 4** — глобальная усечённость корпуса: после сортировки по приоритету список обрезается, пока сумма `token_count` не превышает бюджет (`EvidenceSplitter._limit_total_tokens`).
+> 2. **Stage 5** — отбор подмножества для LLM: `ContextSelector.select_context` передаёт тот же бюджет в **`_select_with_buckets(..., token_budget)`**; чанки не «размножаются», суммарный размер выбранного набора укладывается в остаток бюджета по мере заполнения квот. При **`shrink.enable_auto_shrink`** вызывается **`_ensure_token_budget`** для дожима до лимита.
 >
-> | Стадия | Budget owner? | Что контролирует |
-> |--------|---------------|------------------|
-> | Stage 4 (Evidence) | **YES** | `max_total_tokens=3000`, обрезка чанков |
-> | Stage 5 (Select) | NO | Count-based top-20, re-scoring |
-> | Stage 6 (LLM) | NO | Отправляет as-is |
+> | Стадия | Роль | Что делает |
+> |--------|------|------------|
+> | Stage 4 (Evidence) | **Coarse cap** | Сортировка по `priority_score`, затем префикс списка по `max_total_tokens` |
+> | Stage 5 (Select) | **Selection under cap** | Фильтрация шума, перескоринг, бакеты (`threads_top`, `addressed_to_me`, `dates_deadlines`, `critical_senders`, `remainder` — квоты в `SelectionBucketsConfig` / YAML `selection_buckets`), учёт `token_count` при выборе |
+> | Stage 6 (LLM) | **Consumer** | Формирует запрос из выбранных чанков; бюджет evidence не расширяет |
 
-**Logic:**
-1. Filter out service emails (noreply, undeliverable, OOO, DSN, mailer-daemon)
-2. Re-score chunks (adds to existing `priority_score` from Stage 4):
-   - Positive: actionable words (please, need, approve), direct address (you + must/need/should), deadline patterns
-   - Negative: FYI, newsletters, automated, "no action required"
-3. Select top 20 chunks by combined score
-4. Fallback: min(5, available) if no positive scores
-
-**Known gap:** Stage 5 может вернуть больше чанков, чем пришло от Stage 4
-(невозможно сейчас), но не имеет собственного token enforcement. Если Stage 4
-budget enforcement будет ослаблен — Stage 5 нужно доработать.
+**Logic (implementation: `select/context.py`):**
+1. Отфильтровать служебные письма (noreply, undeliverable, OOO, auto-reply и т.д.).
+2. Пересчитать score для каждого чанка; поле **`priority_score` перезаписывается** новым агрегированным значением (базовый приоритет Stage 4 входит с малым весом — см. `_calculate_enhanced_scores`).
+3. Заполнить бакеты с учётом **`token_budget`** и квот из конфига.
+4. Опционально: auto-shrink, если включён `ShrinkConfig.enable_auto_shrink`.
 
 ---
 
@@ -281,16 +289,17 @@ budget enforcement будет ослаблен — Stage 5 нужно дораб
 - **Запрещено:** multi-step pipeline (extract → summarize → format) расходует
   3 RPM на 1 run и быстро упирается в лимит. ADR-002 (single call) подтверждён.
 
-**LLM Request:**
+**LLM Request (shape; see `LLMGateway._make_request_once` in `llm/gateway.py`):**
 ```json
 {
   "model": "qwen35-397b-a17b",
   "messages": [
     {"role": "system", "content": "<prompt_template>"},
-    {"role": "user", "content": "<numbered evidence blocks>"}
+    {"role": "user", "content": "<numbered evidence blocks with headers>"}
   ],
   "temperature": 0.1,
-  "max_tokens": 2000
+  "max_tokens": 2000,
+  "response_format": {"type": "json_object"}
 }
 ```
 
@@ -324,8 +333,8 @@ Typical run: 1 HTTP call.
   the loader auto-selects `extract_actions.en.v1.txt` (see `run.py:_load_extract_prompt`).
 - JSON mode: qwen3.5 reliably outputs structured JSON with clear schema
   instructions. Few-shot examples still recommended for edge cases.
-- Context window: sufficient for 3000-token evidence + system prompt.
-  No chunking of LLM requests needed.
+- Context window: must fit configured evidence budget (`context_budget.max_total_tokens`, default 7000) + system prompt + completion headroom.
+  No second-round chunking of the **HTTP** request beyond Stage 4/5 (single messages payload).
 
 ---
 
@@ -634,11 +643,11 @@ run_digest("2026-03-29", ...)
 | **2. Normalize** | Malformed HTML | BS4 handles gracefully | OK (no change needed) |
 | **3. Threads** | Empty input | Returns `[]` | OK (no change needed) |
 | **4. Evidence** | No chunks created | Returns `[]` | OK, flows to empty digest |
-| **5. Select** | All chunks filtered | Returns top-5 fallback | OK (no change needed) |
+| **5. Select** | All chunks filtered / empty input | Returns `[]` | OK, flows to empty digest |
 | **6. LLM** | HTTP 429 (rate limit) | `RetryableLLMError` → до 2 попыток с ожиданием (`Retry-After` или дефолт), затем partial digest | OK (см. `gateway.py`, бюджет вызовов в рамках лимита run) |
 | **6. LLM** | HTTP 5xx (server error) | Повтор с backoff (через `RetryableLLMError`), затем partial digest | OK |
 | **6. LLM** | HTTP timeout | После исчерпания ретраев → partial digest с текстом про таймаут | OK (`_build_partial_digest` в `run.py`) |
-| **6. LLM** | Invalid JSON response | Ретраи парсинга/валидации в gateway; при провале — degrade / partial | OK (см. `LLMGateway`, `degrade.py`) |
+| **6. LLM** | Invalid JSON (unparseable body) | `json.loads` failure → `RetryableLLMError` → до 2 HTTP-попыток внутри `_make_request_with_retry`, с подсказкой strict JSON в system prompt. **`extractive_fallback` из `degrade.py` на этом пути не вызывается.** После исчерпания ретраев — исключение → **`_build_partial_digest`** в `run.py`. См. примечание ниже про `process_digest`. | OK |
 | **6. LLM** | Empty sections (no actions found) | Quality retry если есть позитивные сигналы | OK (реализовано) |
 | **7. Assemble** | Disk write failure | Exception → crash | Log error, attempt alternate path or fail with clear message |
 | **7. Assemble** | Word count > 400 | Truncate with "[обрезано]" marker | OK (implemented) |
@@ -648,7 +657,11 @@ run_digest("2026-03-29", ...)
 
 **Partial report format (при сбое LLM):**
 
-Реализовано в `_build_partial_digest()` (`run.py`). Пример формы:
+Реализовано в `_build_partial_digest()` (`run.py`).
+
+**`extract_actions` (default daily run) vs `process_digest`:** типичный `run` вызывает только **`LLMGateway.extract_actions`**. При любом необработанном исключении там пайплайн переходит к partial digest **без** `degrade.extractive_fallback`. Модуль **`degrade.py`** и **`extractive_fallback`** используются в **`LLMGateway.process_digest`** (legacy / enhanced digest path), в т.ч. при `enable_degrade=True` и отсутствии `custom_input` — это **отдельный** контракт от дневного `extract_actions`.
+
+Пример формы partial JSON:
 ```json
 {
   "schema_version": "1.0",
@@ -861,7 +874,7 @@ digest-core/
 | pyyaml | ≥6.0 | YAML config parsing |
 **Not adding (and why):**
 - `jinja2` — prompts are plain text, not templates (see ADR-009)
-- `tiktoken` — token estimation via `words * 1.3` is sufficient for ≤3000 token budget
+- `tiktoken` — approximate `words * 1.3` is sufficient at configured `max_total_tokens` scale (default 7000); ±10% error is acceptable for chunk budgeting
 - `faiss` / `sentence-transformers` — rule-based context selection handles ≤100 emails
 - `celery` / `rq` — single-user batch tool, no task queue needed
 - `sqlalchemy` — no database, file-based state is sufficient
@@ -1129,7 +1142,7 @@ digest-core/
 | Build Web UI before MM delivery works | Push > Pull. Web UI = "remember to visit". MM DM = auto-delivered | MM webhook first, Web UI later for history/search (ADR-010) |
 | Add multiple LLM providers/fallback | One corporate gateway. Provider switching is gateway's job | Single endpoint |
 | Multi-step LLM prompting (extract → summarize → format) | 3 RPM per run at 15 RPM limit = max 5 concurrent users. Single call = 1-2 RPM/run | Keep single LLM call (ADR-002, ADR-008) |
-| Use tiktoken for exact token counting | Approximate `words * 1.3` is sufficient at 3000-token budget scale. Off by ±10% doesn't matter | Keep approximation |
+| Use tiktoken for exact token counting | Approximate `words * 1.3` is sufficient at typical `max_total_tokens` scale (default 7000). Off by ±10% doesn't matter | Keep approximation |
 
 ---
 

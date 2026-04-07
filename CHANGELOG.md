@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `digest-core/docs/ARCHITECTURE.md`: expanded **Stage 3 (THREADS)** to match `ThreadBuilder` (`threads/build.py`); new **§4.4** documents `threads/subject_normalizer.py` / `SubjectNormalizer` (ACTPULSE-39).
+- `digest-core/docs/ARCHITECTURE.md`: Tier-1 reconciliation with code — **Stage 4** output is token-truncated (default `max_total_tokens` **7000**); **`EvidenceChunk`** documented as `@dataclass`; **Stage 5** token/bucket behavior matches `select/context.py`; diagram + §8 error rows (Select empty, LLM invalid JSON vs `extract_actions` / `degrade.py`); qwen context + LLM JSON example include `response_format`; §11 / §15 token-budget wording aligned with defaults.
 
 ## [1.1.0] - 2024-10-15
 

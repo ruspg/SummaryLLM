@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - [`MIGRATION.md`](./MIGRATION.md) at repo root — clarifies V2→V3 field removals vs the default `digest_core.cli run` output (`Digest` schema `1.0` + `extract_actions` prompts).
-- **`RunDigestResult`** from `run_digest()` (`pipeline_succeeded`, `citation_validation_ok`); CLI exit **2** when `--validate-citations` and post-LLM citation build/validation fails; `trace-*.meta.json` includes `citation_validation_ok`.
+- **`RunDigestResult`** from `run_digest()` (`pipeline_succeeded`, `citation_validation_ok`); CLI exit **2** when `--validate-citations` and post-LLM citation build/validation fails; `trace-*.meta.json` includes `citation_validation_ok` ([PR #43](https://github.com/ruspg/ActionPulse/pull/43)).
 - Post-LLM **citation pass** (`CitationBuilder` / `CitationValidator`) when `validate_citations` is set; metric `citation_validation_failures_total` on failure (`post_llm_offsets`).
 - Optional **`DigestRanker`** in `run.py` when **`ranker.enabled`**; `Item.rank_score`; `rank_items` uses `model_copy` for Pydantic models.
 

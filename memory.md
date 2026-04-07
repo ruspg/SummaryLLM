@@ -11,7 +11,7 @@ Updated: 2026-04-07
 - Do not update Plane issue states or open a PR until the branch base and test baseline are verified on the branch that will actually be used.
 - If a PR was opened from stale `main`, close it and restack from fresh `origin/main`. Do not try to salvage bad history.
 - Treat live git state, test results, and Plane as the source of truth for current status. This file stores only invariant workflow rules.
-- Do not store commit hashes, PR numbers, local paths, or transient verification results here.
+- Do not store commit hashes, local paths, or transient verification results here. Ссылку на **текущий интеграционный PR** по ветке `feat/citations-validate-ranker-docs` держите в GitHub / Plane, не дублируйте номер здесь как источник истины.
 
 ## Product notes (slow-changing)
 

@@ -10,8 +10,8 @@ git fetch origin --prune
 git status --short --branch
 
 # Setup — canonical: interactive wizard (6 questions, no text editor)
-make setup                           # uv sync --native-tls + python -m digest_core.cli setup
-python -m digest_core.cli setup      # Re-run wizard (reads existing values as defaults)
+make setup                           # uv sync --native-tls + uv run python -m digest_core.cli setup
+uv run python -m digest_core.cli setup  # Re-run wizard (reads existing values as defaults)
 uv sync --native-tls                 # Deps only, no wizard (headless / CI)
 
 # Development
@@ -100,6 +100,7 @@ make test    # All tests use mocks, run anywhere
 ## Gotchas
 
 - **CLI from repo root**: Top-level `digest_core/` package extends the path into `digest-core/src`; use `python3 -m digest_core.cli` from the monorepo root or `cd digest-core` and the same module name.
+- **Setup auto-CA behavior**: wizard first auto-detects CA in `configs/config.yaml`, `/etc/ssl/corp-ca.pem`, `~/.ssl/corp-ca.pem`, `./certs/corp-ca.pem`; on macOS it can export Root CA from Keychain into `~/.ssl/corp-ca.pem`.
 - **Dry-run still hits EWS** unless you pass `--replay-ingest <snapshot.json>`; missing/invalid EWS env fails fast with a clear error.
 - **NormalizedMessage naming**: Output of Stage 1 (INGEST) is named `NormalizedMessage` but body is still raw HTML. Actual normalization happens in Stage 2. Don't be confused.
 - **Idempotency**: If artifacts exist and are <48h old, pipeline skips. Use `run --force` to bypass the T-48h window.
@@ -120,6 +121,7 @@ MM_WEBHOOK_URL=...        # Mattermost incoming webhook URL
 
 # Optional
 DIGEST_CONFIG_PATH=...    # Custom config YAML path
+ACTIONPULSE_CA_CERT_NAME=...  # macOS setup helper: Keychain certificate alias for auto-export
 # Output/state: use CLI flags --out and --state (not separate DIGEST_* env vars in current code)
 ```
 

@@ -39,11 +39,42 @@ done
 echo ""
 echo "CA certificate:"
 CA_FOUND=false
+CONFIG_CA_PATH=""
+
+# Try to read ews.verify_ca from configs/config.yaml (best effort)
+if [ -f "./configs/config.yaml" ]; then
+    CONFIG_CA_PATH=$(awk '
+        BEGIN { in_ews=0 }
+        /^ews:[[:space:]]*$/ { in_ews=1; next }
+        /^[^[:space:]]/ { in_ews=0 }
+        in_ews && /^[[:space:]]*verify_ca:[[:space:]]*/ {
+            line=$0
+            sub(/^[[:space:]]*verify_ca:[[:space:]]*/, "", line)
+            sub(/[[:space:]]*#.*/, "", line)
+            gsub(/"/, "", line)
+            gsub(/'\''/, "", line)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+            if (line == "null" || line == "~") line=""
+            print line
+            exit
+        }
+    ' "./configs/config.yaml")
+fi
+
+if [ -n "$CONFIG_CA_PATH" ]; then
+    if [ -f "$CONFIG_CA_PATH" ]; then
+        echo "✓ Configured ews.verify_ca found: $CONFIG_CA_PATH"
+        CA_FOUND=true
+    else
+        echo "✗ Configured ews.verify_ca missing: $CONFIG_CA_PATH"
+    fi
+fi
+
 for ca_path in "/etc/ssl/corp-ca.pem" "${HOME}/.ssl/corp-ca.pem" "./certs/corp-ca.pem"; do
-    if [ -f "$ca_path" ]; then
+    if [ -f "$ca_path" ] && [ "$ca_path" != "$CONFIG_CA_PATH" ]; then
         echo "✓ Corporate CA found: $ca_path"
         echo "  Certificate info:"
-        openssl x509 -in "$ca_path" -text -noout | grep -E "(Subject:|Not Before|Not After)" || true
+        openssl x509 -in "$ca_path" -text -noout | rg "(Subject:|Not Before|Not After)" || true
         CA_FOUND=true
         break
     fi

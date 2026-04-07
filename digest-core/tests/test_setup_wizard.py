@@ -3,6 +3,7 @@
 import yaml
 
 from digest_core.setup_wizard import (
+    _auto_detect_ca_path,
     _derive_from_email,
     _read_existing_env,
     _write_env_file,
@@ -188,6 +189,28 @@ class TestReadExistingEnv:
         monkeypatch.setattr("digest_core.setup_wizard.ENV_PATH", tmp_path / "nonexistent")
         result = _read_existing_env()
         assert result == {}
+
+
+class TestAutoDetectCaPath:
+    """Test automatic CA certificate path detection."""
+
+    def test_prefers_existing_config_path_when_present(self, tmp_path, monkeypatch):
+        ca_path = tmp_path / "corp-ca.pem"
+        ca_path.write_text("dummy", encoding="utf-8")
+        existing_cfg = {"ews": {"verify_ca": str(ca_path)}}
+
+        result = _auto_detect_ca_path(existing_cfg)
+        assert result == str(ca_path)
+
+    def test_falls_back_to_home_ssl_path(self, tmp_path, monkeypatch):
+        fake_home = tmp_path / "home"
+        ca_path = fake_home / ".ssl" / "corp-ca.pem"
+        ca_path.parent.mkdir(parents=True)
+        ca_path.write_text("dummy", encoding="utf-8")
+        monkeypatch.setattr("digest_core.setup_wizard.Path.home", lambda: fake_home)
+
+        result = _auto_detect_ca_path(existing_cfg={})
+        assert result == str(ca_path)
 
 
 class TestSetupCommand:

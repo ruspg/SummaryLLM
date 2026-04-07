@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -23,6 +25,8 @@ ENV_DIR = Path.home() / ".config" / "actionpulse"
 ENV_PATH = ENV_DIR / "env"
 CONFIG_EXAMPLE = PROJECT_ROOT / "configs" / "config.example.yaml"
 CONFIG_USER = PROJECT_ROOT / "configs" / "config.yaml"
+DEFAULT_CA_EXPORT_PATH = Path.home() / ".ssl" / "corp-ca.pem"
+DEFAULT_CA_CHAIN_EXPORT_PATH = Path.home() / ".ssl" / "corp-ca-chain.pem"
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +153,92 @@ def _write_config_yaml(
     return CONFIG_USER
 
 
+def _existing_ca_candidates(existing_cfg: dict) -> list[Path]:
+    """Return prioritized CA path candidates from config + standard locations."""
+    candidates: list[Path] = []
+
+    cfg_ca = existing_cfg.get("ews", {}).get("verify_ca")
+    if isinstance(cfg_ca, str) and cfg_ca.strip():
+        candidates.append(Path(cfg_ca).expanduser())
+
+    candidates.extend(
+        [
+            Path("/etc/ssl/corp-ca.pem"),
+            Path.home() / ".ssl" / "corp-ca.pem",
+            PROJECT_ROOT / "certs" / "corp-ca.pem",
+        ]
+    )
+    return candidates
+
+
+def _auto_detect_ca_path(existing_cfg: dict) -> Optional[str]:
+    """Return first existing CA path from known candidates."""
+    for path in _existing_ca_candidates(existing_cfg):
+        if path.exists():
+            return str(path)
+    return None
+
+
+def _guess_default_ca_alias(user_upn: str) -> Optional[str]:
+    """Best-effort default Keychain alias for corp CA on macOS."""
+    override = os.getenv("ACTIONPULSE_CA_CERT_NAME", "").strip()
+    if override:
+        return override
+
+    domain = user_upn.partition("@")[2].lower()
+    if "raiffeisen" in domain:
+        return "AO Raiffeisenbank RootCA"
+    return None
+
+
+def _guess_default_intermediate_ca_alias(user_upn: str) -> Optional[str]:
+    """Best-effort intermediate CA alias for corp chains on macOS."""
+    domain = user_upn.partition("@")[2].lower()
+    if "raiffeisen" in domain:
+        return "AO Raiffeisenbank Issuing"
+    return None
+
+
+def _export_ca_from_keychain(cert_name: str) -> Optional[str]:
+    """Read a CA certificate from macOS Keychain as PEM text."""
+    try:
+        result = subprocess.run(
+            ["security", "find-certificate", "-c", cert_name, "-a", "-p"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return None
+
+    pem = result.stdout.strip()
+    if result.returncode != 0 or not pem or "BEGIN CERTIFICATE" not in pem:
+        return None
+
+    return pem
+
+
+def _export_ca_chain_from_keychain(
+    root_alias: str, output_path: Path, intermediate_alias: Optional[str] = None
+) -> tuple[bool, int]:
+    """Export root (+ optional intermediate) into a single PEM chain file."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    certs: list[str] = []
+
+    root_pem = _export_ca_from_keychain(root_alias)
+    if not root_pem:
+        return False, 0
+    certs.append(root_pem.strip())
+
+    if intermediate_alias:
+        intermediate_pem = _export_ca_from_keychain(intermediate_alias)
+        if intermediate_pem:
+            certs.append(intermediate_pem.strip())
+
+    output_path.write_text("\n\n".join(certs) + "\n", encoding="utf-8")
+    return True, len(certs)
+
+
 # ---------------------------------------------------------------------------
 # Main wizard
 # ---------------------------------------------------------------------------
@@ -233,12 +323,49 @@ def run_setup() -> None:
     ).strip()
     typer.echo("")
 
-    # ── Optional: CA certificate ──
-    verify_ca: Optional[str] = None
-    if typer.confirm("Нужен кастомный CA-сертификат для EWS?", default=False):
+    # ── Optional: CA certificate (auto-first) ──
+    verify_ca: Optional[str] = _auto_detect_ca_path(existing_cfg)
+    if verify_ca:
+        typer.echo(f"Автообнаружен CA-сертификат: {verify_ca}")
+        if not typer.confirm("Использовать этот CA для EWS?", default=True):
+            verify_ca = None
+    else:
+        typer.echo("CA-сертификат в стандартных путях не найден.")
+        if sys.platform == "darwin" and typer.confirm(
+            f"Попробовать экспортировать CA chain из Keychain в {DEFAULT_CA_CHAIN_EXPORT_PATH}?",
+            default=True,
+        ):
+            default_alias = _guess_default_ca_alias(user_upn)
+            default_intermediate_alias = _guess_default_intermediate_ca_alias(user_upn)
+            cert_name = typer.prompt(
+                "  Имя Root CA сертификата в Keychain",
+                default=default_alias or "AO Raiffeisenbank RootCA",
+            ).strip()
+            intermediate_alias = typer.prompt(
+                "  Имя Intermediate CA (Enter чтобы пропустить)",
+                default=default_intermediate_alias or "",
+                show_default=False,
+            ).strip()
+            if not intermediate_alias:
+                intermediate_alias = None
+
+            ok, cert_count = _export_ca_chain_from_keychain(
+                cert_name,
+                DEFAULT_CA_CHAIN_EXPORT_PATH,
+                intermediate_alias=intermediate_alias,
+            )
+            if ok:
+                verify_ca = str(DEFAULT_CA_CHAIN_EXPORT_PATH)
+                typer.echo(f"  ✓ CA chain экспортирован: {verify_ca} ({cert_count} cert)")
+            else:
+                typer.echo("  ⚠ Не удалось экспортировать CA chain из Keychain.", err=True)
+
+    if not verify_ca and typer.confirm("Указать путь к CA-сертификату вручную?", default=False):
         verify_ca = typer.prompt("  Путь к CA-сертификату (.pem)").strip()
-        if verify_ca and not Path(verify_ca).exists():
+        if verify_ca and not Path(verify_ca).expanduser().exists():
             typer.echo(f"  ⚠ Файл не найден: {verify_ca} (сохраняю путь как есть)")
+        elif verify_ca:
+            verify_ca = str(Path(verify_ca).expanduser())
     typer.echo("")
 
     # ── Write files ──
@@ -275,5 +402,5 @@ def run_setup() -> None:
     typer.echo("Следующий шаг — загрузить env и проверить:")
     typer.echo("")
     typer.echo(f"  set -a && source {env_path} && set +a")
-    typer.echo("  python -m digest_core.cli diagnose")
+    typer.echo("  uv run python -m digest_core.cli diagnose")
     typer.echo("")

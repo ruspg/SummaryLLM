@@ -1,6 +1,6 @@
 # Citation System: Extractive Traceability
 
-> **Состояние на 2026-04 (сверка с кодом):** модели и утилиты цитирования (`Citation`, `CitationBuilder`, `CitationValidator` и т.д.) **существуют** и покрыты тестами, но **оркестрация `digest_core/run.py` не вызывает** пост-LLM enrichment/валидацию цитат. Флаг CLI `--validate-citations` записывается в `run_meta` и **не меняет** успешность run и **не** приводит к exit code 2 сегодня. Ниже — целевая архитектура и справка по метрикам; поведение `run` смотрите в `run.py` и `cli.py`.
+> **Состояние на 2026-04 (сверка с кодом):** модели и утилиты цитирования (`Citation`, `CitationBuilder`, `CitationValidator` и т.д.) **существуют** и покрыты тестами, но **оркестрация `digest_core/run.py` не вызывает** пост-LLM enrichment/валидацию цитат. Флаг CLI `--validate-citations` записывается в `run_meta` и **не меняет** успешность run и **не** приводит к exit code 2 сегодня. Краткая строка в SoT: [`digest-core/docs/ARCHITECTURE.md` §8](../../digest-core/docs/ARCHITECTURE.md#8-error-taxonomy) (таблица **CLI** / `--validate-citations`). Ниже — целевая архитектура и справка по метрикам; поведение `run` смотрите в `run.py` и `cli.py`.
 
 ## Обзор
 

@@ -101,7 +101,7 @@ make test    # All tests use mocks, run anywhere
 - **Dry-run still hits EWS** unless you pass `--replay-ingest <snapshot.json>`; missing/invalid EWS env fails fast with a clear error.
 - **NormalizedMessage naming**: Output of Stage 1 (INGEST) is named `NormalizedMessage` but body is still raw HTML. Actual normalization happens in Stage 2. Don't be confused.
 - **Idempotency**: If artifacts exist and are <48h old, pipeline skips. Use `run --force` to bypass the T-48h window.
-- **Token estimation**: `words * 1.3` approximation, NOT tiktoken. Off by ~10% but fine for 3000-token budget.
+- **Token estimation**: `words * 1.3` approximation, NOT tiktoken. Off by ~10% but fine for typical `context_budget.max_total_tokens` (default 7000).
 - **LLM timeout**: Default `timeout_s` is 120s for qwen35-397b-a17b (see `LLMConfig`).
 - **Extraction prompts**: `extract_actions*.txt` are plain text (ADR-009). Other flows may still reference `.j2` paths via `llm/prompt_registry.py` (e.g. hierarchical summarize).
 - **`hierarchical/` is EXPERIMENTAL** and not called by `run.py`. It implements a multi-step LLM pipeline (per-thread summarize → aggregate) for high-volume use cases. It violates ADR-002 (single LLM call) and would exhaust the 15 RPM gateway limit. Do not integrate without explicit design approval. See `hierarchical/__init__.py` for full context.

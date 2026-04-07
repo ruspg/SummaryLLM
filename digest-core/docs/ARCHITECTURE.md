@@ -186,9 +186,9 @@ class ConversationThread(NamedTuple):
 2. **Thread assignment** (per message, first match wins):
    - **Strategy 1:** EWS `conversation_id` → stable key `conv_<id>`.
    - **Strategy 2:** `In-Reply-To` / `References` vs an index of seen `msg_id` → inherit parent thread.
-   - **Strategy 3:** **Normalized subject** → key `subj_<hash(normalized)>`; merge with existing thread if any message already shares the same normalized subject (see §4.4).
+   - **Strategy 3:** **Normalized subject** → key `subj_<hash(normalized)>`; merge with existing thread if any message already shares the same normalized subject. Нормализация темы и семантика слияния — **§4.4** (`SubjectNormalizer`); контракт стадии — **этот подпункт** (#### Stage 3 внутри §4.2).
    - **Fallback:** empty subject → `single_<msg_id>`.
-3. **Semantic merge pass:** threads that share a normalized subject may be merged when **body text similarity** exceeds `semantic_similarity_threshold` (default 0.7; `calculate_text_similarity` in `subject_normalizer.py`).
+3. **Semantic merge pass:** threads that share a normalized subject may be merged when **body text similarity** exceeds `semantic_similarity_threshold` (default 0.7; `calculate_text_similarity` в `subject_normalizer.py`, см. §4.4).
 4. **Caps:** max 50 messages per thread (oldest dropped).
 5. **Sort** threads by `latest_message_time` DESC.
 
@@ -237,6 +237,8 @@ class EvidenceChunk:
 1. Split by paragraphs (`\n\n`)
 2. If paragraph > 512 tokens → split by sentences (`[.!?]+`)
 3. If sentence > 512 tokens → hard truncate
+
+**Implementation note:** В `evidence/split.py` есть **`_detect_structural_breaks()`** (заголовки, списки, маркеры цитирования) — задел под более структурный сплит; **текущий путь сплита его не вызывает**, фактическое поведение соответствует шагам 1–3 выше.
 
 **Priority scoring (additive):**
 - Action words (please, need, urgent, approve, deadline...): +1.0 each
@@ -487,13 +489,21 @@ File artifacts already written by Stage 7 — delivery is best-effort.
 **Primary API:**
 - `normalize(subject: str) -> (normalized_subject, original_subject)` — iteratively strips nested **Re:/Fwd:/Ответ:/Пересл:** (RU+EN), **(External)** markers, bracket/parenthesis **tags** (limited length), **emoji**, normalizes smart quotes and dashes, collapses whitespace, **lowercases**, applies **Unicode NFC**. Original string is returned untouched for display/logging; only the normalized form is used as a merge key inside `ThreadBuilder`.
 - `is_similar(a, b)` — equality of normalized forms.
-- `calculate_text_similarity` — lightweight character-level similarity used when merging threads that already share a normalized subject (semantic pass in **Stage 3: THREADS**, §4.2).
+- `calculate_text_similarity` — lightweight character-level similarity used when merging threads that already share a normalized subject (semantic pass in **#### Stage 3: THREADS** above, same §4.2).
 
-**Call sites:** `ThreadBuilder` (`threads/build.py`) — subject-hash grouping, subject-based thread matching, and semantic-merge grouping (§4.2).
+**Call sites:** `ThreadBuilder` (`threads/build.py`) — subject-hash grouping, subject-based thread matching, and semantic-merge grouping (**#### Stage 3: THREADS** в §4.2 выше).
 
 **Pipeline status:** **In production path** — invoked during every `run` that builds threads (Stage 3). Unlike `DigestRanker` (§4.3 above), this module is **always** used when `ThreadBuilder` runs.
 
 **Tests:** `tests/test_threading.py` (and related threading tests).
+
+---
+
+### 4.5 `llm/models.py` — `LLMResponse` / `parse_llm_json`
+
+**Purpose:** Строгие Pydantic-модели (`LLMResponse`, `EvidenceItem`, `SummaryItem`) и **`parse_llm_json()`** для валидации JSON от LLM в альтернативном формате (`evidence` / `summary` списки).
+
+**Pipeline status:** **Не** используется **`LLMGateway.extract_actions`** и **не** используется типичным **`run.py`**: основной путь парсит JSON в gateway и валидирует контракт **`Digest`** / секций. Файл полезен для тестов, утилит и экспериментов; не считать его частью default daily pipeline без явной проводки.
 
 ---
 
@@ -583,6 +593,8 @@ observability:
 **Canonical source:** `digest_core/observability/metrics.py` — `MetricsCollector._init_metrics`. Все объявленные там серии попадают в registry на порту **9108** (по умолчанию). Имена и labelsets ниже краткие; точное определение — только в коде.
 
 **На пути `digest_core.cli run`:** обновляются LLM-, pipeline-, email- и evidence-счётчики, стадийные гистограммы, `runs_total`, при partial после сбоя LLM — `degradations_total` и др. **Не каждая** серия инкрементится на каждом запуске (серии под иерархический режим, часть ranking-метрик и т.д. могут оставаться нулевыми, пока соответствующий код не вызывает `record_*`).
+
+**Что вызывает `run.py` напрямую:** `record_emails_total`, `record_pipeline_stage_duration` (по стадиям), `record_llm_latency`, `record_llm_tokens`, `record_run_total`, `record_digest_build_time`, при сбое LLM — `record_degradation`. **`LLMGateway`** при невалидном JSON в теле ответа может вызвать **`record_llm_json_error`**. При переданном в нормализацию **`MetricsCollector`** считаются **`html_*`** счётчики в `normalize/html.py`. Методы вроде **`record_evidence_chunks`**, **`record_threads`**, **`record_hierarchical_run`**, ranking-`record_*` объявлены на **`MetricsCollector`**, но **из `run.py` не вызываются** (ищите `record_` по `src/digest_core/`).
 
 #### Основные: pipeline и LLM
 
@@ -691,12 +703,15 @@ run_digest("2026-03-29", ...)
 | **8. Deliver** | MM webhook unreachable | `logger.warning()`, exit 0. Файлы уже сохранены | OK (ADR-011, `mattermost.py`) |
 | **8. Deliver** | MM message too long (>16383) | Дробление на несколько сообщений | OK (`MattermostDeliverer`) |
 | **8. Deliver** | MM webhook returns 4xx | Warning / лог; без ретрая (конфиг) | OK |
+| **CLI** | `--validate-citations` | Флаг попадает в `run_meta`; **валидация цитат в `run.py` не выполняется**; exit **2** из `cli.py` для провала цитат сегодня **недостижим**. См. `docs/development/CITATIONS.md`, `digest-core/CLAUDE.md` (CLI exit codes). | Запланировано: проводка + exit 2 при fail |
 
 **Partial report format (при сбое LLM):**
 
 Реализовано в `_build_partial_digest()` (`run.py`).
 
 **`extract_actions` (default daily run) vs `process_digest`:** типичный `run` вызывает только **`LLMGateway.extract_actions`**. При любом необработанном исключении там пайплайн переходит к partial digest **без** `degrade.extractive_fallback`. Модуль **`degrade.py`** и **`extractive_fallback`** используются в **`LLMGateway.process_digest`** (legacy / enhanced digest path), в т.ч. при `enable_degrade=True` и отсутствии `custom_input` — это **отдельный** контракт от дневного `extract_actions`.
+
+**`process_digest` + `custom_input` (hierarchical final aggregation):** если передан **`custom_input`**, ветка с **`extractive_fallback` отключена** — при ошибке LLM исключение пробрасывается наверх (см. `gateway.py`). Не смешивать с поведением «обычного» `process_digest` без `custom_input`.
 
 Пример формы partial JSON:
 ```json
@@ -972,6 +987,7 @@ digest-core/
   Single-call (1-2 calls/run) = max 7-15 runs/min. Подтверждает и усиливает ADR-002.
 - **Consequence:** Prompt quality — единственный рычаг. Нельзя компенсировать
   плохой extraction вторым LLM-вызовом для "cleanup".
+- **Scope:** Ограничение по числу вызовов относится к **default `run.py`** / **`extract_actions`**. Экспериментальный пакет **`hierarchical/`** (не вызывается из `run.py` в MVP) делает **несколько** HTTP-вызовов на прогон; включение его в прод-путь требует отдельного решения по ADR-002/008 и лимиту RPM.
 - **Revisit when:** Rate limit увеличен до ≥60 RPM или добавлен второй endpoint.
 
 ### ADR-009: Extraction prompts are plain text (Jinja2 elsewhere only)

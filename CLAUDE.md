@@ -10,7 +10,7 @@ digest-core/     # Python package — the actual product (see digest-core/CLAUDE
 
 Monorepo with one package. All development happens in `digest-core/`.
 
-**Setup:** `cd digest-core && make setup` runs `uv sync --native-tls` and then the interactive wizard (`python -m digest_core.cli setup`). Re-run anytime with either **`make setup`** or **`python -m digest_core.cli setup`** — the wizard reads existing values as defaults and writes `~/.config/actionpulse/env` + `configs/config.yaml`.
+**Setup:** `cd digest-core && make setup` runs `uv sync --native-tls` first (if that fails, the Makefile falls back to plain `uv sync`), then the interactive wizard (`python -m digest_core.cli setup`). Re-run anytime with either **`make setup`** or **`python -m digest_core.cli setup`** — the wizard reads existing values as defaults and writes `~/.config/actionpulse/env` + `configs/config.yaml`.
 
 ## Key Documents
 

@@ -28,7 +28,8 @@ echo ""
 echo "Environment variables:"
 for var in EWS_USER_UPN EWS_PASSWORD LLM_TOKEN EWS_ENDPOINT LLM_ENDPOINT; do
     if [ -n "${!var:-}" ]; then
-        echo "✓ $var: set (${#!var} characters)"
+        val="${!var}"
+        echo "✓ $var: set (${#val} characters)"
     else
         echo "✗ $var: not set"
     fi

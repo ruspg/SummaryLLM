@@ -30,16 +30,18 @@ make setup
 
 # Загрузить секреты в текущую сессию и проверить конфигурацию
 set -a && source ~/.config/actionpulse/env && set +a
-python -m digest_core.cli diagnose
+uv run python -m digest_core.cli diagnose
 
 # Dry-run (без LLM, только ingest + normalize)
-python -m digest_core.cli run --dry-run
+uv run python -m digest_core.cli run --dry-run
 
 # Полный запуск
-python -m digest_core.cli run
+uv run python -m digest_core.cli run
 ```
 
-Мастер задаст: корпоративный email, EWS endpoint, EWS пароль, LLM endpoint, LLM токен, Mattermost webhook URL. Сгенерирует `~/.config/actionpulse/env` (chmod 600) и `configs/config.yaml`. Повторная настройка: `make setup` или напрямую `python -m digest_core.cli setup` из `digest-core/` (оба вызывают один и тот же wizard).
+Мастер задаст: корпоративный email, EWS endpoint, EWS пароль, LLM endpoint, LLM токен, Mattermost webhook URL. Сгенерирует `~/.config/actionpulse/env` (chmod 600) и `configs/config.yaml`. Повторная настройка: `make setup` или напрямую `uv run python -m digest_core.cli setup` из `digest-core/` (оба вызывают один и тот же wizard).
+
+Если видите ошибку `No module named 'digest_core'`, значит команда запущена системным Python вне окружения проекта. Используйте `uv run python -m ...` (как в примерах выше) или активируйте `.venv` вручную.
 
 ### Mattermost интеграция (важно)
 ActionPulse использует **incoming webhook** Mattermost для **доставки** готового дайджеста (Stage 8). Для чтения сообщений/DM пассивно собирать данные не требуется — в MVP не используется API/WebSocket “для чтения”.

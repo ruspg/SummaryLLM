@@ -9,6 +9,7 @@ import yaml
 from typer.testing import CliRunner
 
 from digest_core import run as runner
+from digest_core.run import RunDigestResult
 from digest_core.cli import app
 from digest_core.config import Config, LLMConfig, MattermostDeliverConfig
 from digest_core.deliver.mattermost import MattermostDeliverer
@@ -309,13 +310,49 @@ def test_pipeline_replay_runs_from_repo_root(monkeypatch, tmp_path):
 
     payload = json.loads((out_dir / "digest-2026-03-29.json").read_text(encoding="utf-8"))
 
-    assert result is True
+    assert result
+    assert isinstance(result, RunDigestResult)
+    assert result.citation_validation_ok is True
     assert [section["title"] for section in payload["sections"]] == [
         "Мои действия",
         "К сведению",
     ]
     assert FakeDeliverer.deliveries
     assert list(out_dir.glob("trace-*.meta.json"))
+
+
+def test_pipeline_validate_citations_replay(monkeypatch, tmp_path):
+    snapshot_path = tmp_path / "snapshot.json"
+    out_dir = tmp_path / "out"
+    runner._dump_ingest_snapshot(snapshot_path, [make_message()], "2026-03-29")
+
+    monkeypatch.chdir(Path(__file__).resolve().parents[2])
+    monkeypatch.setattr(runner, "MetricsCollector", DummyMetrics)
+    monkeypatch.setattr(runner, "start_health_server", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "LLMGateway", FakeGateway)
+    monkeypatch.setattr(runner, "MattermostDeliverer", FakeDeliverer)
+
+    result = runner.run_digest(
+        from_date="2026-03-29",
+        sources=["ews"],
+        out=str(out_dir),
+        model="qwen35-397b-a17b",
+        window="calendar_day",
+        state=None,
+        validate_citations=True,
+        force=True,
+        replay_ingest=str(snapshot_path),
+    )
+
+    payload = json.loads((out_dir / "digest-2026-03-29.json").read_text(encoding="utf-8"))
+    meta_path = next(out_dir.glob("trace-*.meta.json"))
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+
+    assert result.citation_validation_ok is True
+    assert meta.get("citation_validation_ok") is True
+    for section in payload["sections"]:
+        for item in section["items"]:
+            assert item.get("citations"), f"expected citations for item {item.get('evidence_id')}"
 
 
 def test_pipeline_writes_partial_digest_on_llm_failure(monkeypatch, tmp_path):
@@ -341,7 +378,8 @@ def test_pipeline_writes_partial_digest_on_llm_failure(monkeypatch, tmp_path):
 
     payload = json.loads((out_dir / "digest-2026-03-29.json").read_text(encoding="utf-8"))
 
-    assert result is True
+    assert result
+    assert isinstance(result, RunDigestResult)
     assert payload["sections"][0]["title"] == "Статус"
     assert "таймаут" in payload["sections"][0]["items"][0]["title"].lower()
 

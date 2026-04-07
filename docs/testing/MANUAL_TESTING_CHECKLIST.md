@@ -20,7 +20,7 @@
 - [ ] Клонировать репозиторий
 - [ ] Перейти в директорию `digest-core`
 - [ ] Выполнить `make setup` (запустит `uv sync --native-tls` + интерактивный wizard)
-- [ ] Проверить установку: `python -m digest_core.cli --help`
+- [ ] Проверить установку: `python -m digest_core.cli --help` и `python -m digest_core.cli run --help` (подкоманды: `run`, `diagnose`, `mm-ping`, `export-diagnostics`, `setup`, `eval-prompt`)
 
 ### 1.2 Настройка переменных окружения
 - [ ] Wizard уже создал `~/.config/actionpulse/env` с EWS_PASSWORD, EWS_USER_UPN, LLM_TOKEN, MM_WEBHOOK_URL
@@ -73,11 +73,20 @@
 - [ ] Убедиться в корректности структуры данных
 - [ ] Проверить наличие секций и элементов действий
 
-### 3.3 Проверка метрик
-- [ ] Проверить доступность Prometheus метрик на порту 9108
+### 3.3 Проверка метрик и health
+- [ ] Проверить **Prometheus** метрики: `curl http://localhost:9108/metrics` (порт по умолчанию; см. `observability.prometheus_port` / `DIGEST_OBSERVABILITY_PROMETHEUS_PORT`)
+- [ ] Проверить **health/readiness** на порту **9109**: `curl -s http://localhost:9109/healthz` и при необходимости `/readyz`
 - [ ] Убедиться в наличии метрик LLM запросов
 - [ ] Проверить метрики обработки писем
 - [ ] Проверить метрики времени выполнения
+
+### 3.4 Гейт цитат и офлайн-режим
+- [ ] (Опционально, CI/качество) Полный `run` с **`--validate-citations`**: ожидается код **0** при успешной валидации; при провале — код **2**; в `trace-*.meta.json` поле **`citation_validation_ok`**
+- [ ] Офлайн без EWS: **`--replay-ingest path/to/snapshot.json`** (снимок через **`--dump-ingest`** на машине в корп-сети)
+- [ ] Идемпотентность: повторный run с свежими артефактами — skip; с **`--force`** — пересборка
+
+### 3.5 Mattermost до полного run
+- [ ] Проверить webhook: `python -m digest_core.cli mm-ping` (нужен `MM_WEBHOOK_URL`)
 
 ## Этап 4: Тесты граничных случаев
 
@@ -220,6 +229,15 @@ scripts/collect_diagnostics.sh
 
 # Проверка метрик
 curl http://localhost:9108/metrics
+
+# Health (отдельный порт)
+curl -s http://localhost:9109/healthz
+
+# Проверка MM webhook
+python -m digest_core.cli mm-ping
+
+# Экспорт диагностики (нужен trace-id или дата)
+python -m digest_core.cli export-diagnostics --trace-id <uuid> --out /tmp/diag
 
 # Проверка логов
 tail -f ~/.digest-logs/run-*.log

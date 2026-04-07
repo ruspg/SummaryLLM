@@ -12,7 +12,7 @@ import structlog
 from jinja2 import Environment, FileSystemLoader
 from digest_core.config import LLMConfig, PROJECT_ROOT
 from digest_core.evidence.split import EvidenceChunk
-from digest_core.llm.schemas import Digest, EnhancedDigest, EnhancedDigestV3
+from digest_core.llm.schemas import Citation, Digest, EnhancedDigest, EnhancedDigestV3
 from digest_core.llm.date_utils import get_current_datetime_in_tz
 from digest_core.llm.degrade import extractive_fallback
 from digest_core.llm.prompt_registry import get_prompt_template_path
@@ -573,13 +573,28 @@ Signals: action_verbs=[{action_verbs_str}]; dates=[{dates_str}]; contains_questi
             logger.warning("Invalid source_ref structure")
             return None
 
-        return {
+        out: Dict[str, Any] = {
             "title": item["title"],
             "due": item.get("due"),
             "evidence_id": evidence_id,
             "confidence": confidence,
             "source_ref": source_ref,
         }
+        if item.get("email_subject") is not None:
+            out["email_subject"] = item["email_subject"]
+        raw_citations = item.get("citations")
+        if isinstance(raw_citations, list) and raw_citations:
+            parsed: List[Citation] = []
+            for c in raw_citations:
+                if not isinstance(c, dict):
+                    continue
+                try:
+                    parsed.append(Citation.model_validate(c))
+                except Exception:
+                    logger.warning("Skipping invalid citation dict from LLM output")
+            if parsed:
+                out["citations"] = [cit.model_dump() for cit in parsed]
+        return out
 
     def summarize_digest(self, digest_data: Digest, prompt_template: str, trace_id: str) -> str:
         """Generate markdown summary of digest."""

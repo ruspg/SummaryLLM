@@ -11,9 +11,10 @@
 >   префикса `corp/`), см. [`cli.py:29`](../../digest-core/src/digest_core/cli.py).
 > - `run_digest(from_date, sources, output_dir, model, dry_run, verbose, window, config)`
 >   с возвратом `result` объекта (`result.success`, `result.output_files`, `result.error`)
->   → реальная сигнатура: `run_digest(from_date, sources, out, model, window, state, validate_citations=False, force=False, dump_ingest=None, replay_ingest=None, record_llm=None, replay_llm=None) -> bool`
->   (см. [`run.py:80`](../../digest-core/src/digest_core/run.py)). Параметра `verbose`
->   и параметра `config` нет; параметр зовётся `out`, а не `output_dir`.
+>   → реальная сигнатура: `run_digest(..., validate_citations=False, ...) -> RunDigestResult`
+>   (см. [`run.py`](../../digest-core/src/digest_core/run.py): `RunDigestResult` с полями
+>   `pipeline_succeeded`, `citation_validation_ok`; truthiness = успех пайплайна).
+>   Параметров `verbose` и `config` нет; каталог вывода — `out`, не `output_dir`.
 > - Структура `LLMGatewayClient` ниже — упрощённая иллюстрация; реальный
 >   `LLMGateway` в [`llm/gateway.py`](../../digest-core/src/digest_core/llm/gateway.py)
 >   использует `tenacity.Retrying`, `RetryableLLMError`, rate-limit spacing

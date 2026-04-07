@@ -62,7 +62,7 @@ python -m digest_core.cli run                      # Полный запуск
 - **[Business Requirements (Full)](reference/BRD_FULL.md)** - Полные бизнес-требования с roadmap
 - **[KPI](reference/KPI.md)** - Ключевые показатели эффективности
 - **[Quality Metrics](reference/QUALITY_METRICS.md)** - Метрики качества AI и система оценки
-- **[Cost Management](reference/COST_MANAGEMENT.md)** - Управление стоимостью и контроль бюджета
+- **[Cost Management](reference/COST_MANAGEMENT.md)** — Лимиты токенов и контекста (Phase 0); целевой USD-контроль (Phase 1+, TD-006)
 - **[API Documentation](reference/API.md)** - Документация API (в разработке)
 
 ### 🔧 Решение проблем

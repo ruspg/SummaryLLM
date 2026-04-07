@@ -20,6 +20,8 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from dataclasses import dataclass
 
+from pydantic import BaseModel
+
 logger = structlog.get_logger()
 
 
@@ -119,14 +121,18 @@ class DigestRanker:
         """
         logger.info("Starting item ranking", item_count=len(items))
 
-        # Extract features and calculate scores
+        ranked_items: List[Any] = []
         for item in items:
             features = self._extract_features(item, evidence_chunks)
             score = self._calculate_score(features)
 
-            # Store score in item (if possible)
-            if hasattr(item, "rank_score"):
+            if isinstance(item, BaseModel):
+                ranked_items.append(item.model_copy(update={"rank_score": score}))
+            elif hasattr(item, "rank_score"):
                 item.rank_score = score
+                ranked_items.append(item)
+            else:
+                ranked_items.append(item)
 
             logger.debug(
                 "Item ranked",
@@ -135,18 +141,17 @@ class DigestRanker:
                 features=features.__dict__,
             )
 
-        # Sort by score (highest first)
-        sorted_items = sorted(
-            items, key=lambda item: getattr(item, "rank_score", 0.0), reverse=True
-        )
+        def _score_key(it: Any) -> float:
+            rs = getattr(it, "rank_score", None)
+            return float(rs) if rs is not None else 0.0
+
+        sorted_items = sorted(ranked_items, key=_score_key, reverse=True)
 
         logger.info(
             "Ranking completed",
             item_count=len(sorted_items),
             avg_score=(
-                sum(getattr(i, "rank_score", 0.0) for i in sorted_items) / len(sorted_items)
-                if sorted_items
-                else 0
+                sum(_score_key(i) for i in sorted_items) / len(sorted_items) if sorted_items else 0
             ),
         )
 
@@ -179,8 +184,8 @@ class DigestRanker:
         # Feature 1: user_in_to / user_in_cc
         if hasattr(chunk, "message_metadata"):
             metadata = chunk.message_metadata
-            to_recipients = metadata.get("to_recipients", [])
-            cc_recipients = metadata.get("cc_recipients", [])
+            to_recipients = metadata.get("to_recipients") or metadata.get("to") or []
+            cc_recipients = metadata.get("cc_recipients") or metadata.get("cc") or []
 
             for alias in self.user_aliases:
                 if any(alias in str(r).lower() for r in to_recipients):
@@ -195,7 +200,11 @@ class DigestRanker:
 
         # Feature 2: action/mention (check if item is ExtractedActionItem or has action markers)
         item_type = type(item).__name__
-        if item_type == "ExtractedActionItem":
+        if item_type == "Item":
+            title = getattr(item, "title", "") or ""
+            if self._has_action_markers(title):
+                features.has_action = True
+        elif item_type == "ExtractedActionItem":
             if getattr(item, "type", "") == "action":
                 features.has_action = True
             elif getattr(item, "type", "") == "mention":
@@ -214,7 +223,11 @@ class DigestRanker:
                 break
 
         # Feature 4: sender importance
-        sender = getattr(chunk, "sender", "") or chunk.message_metadata.get("sender", "")
+        sender = (
+            getattr(chunk, "sender", "")
+            or chunk.message_metadata.get("from", "")
+            or chunk.message_metadata.get("sender", "")
+        )
         if sender:
             features.sender_importance = self._calculate_sender_importance(sender)
 

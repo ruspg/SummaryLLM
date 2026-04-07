@@ -1,6 +1,6 @@
 # Ranking: Приоритизация пунктов дайджеста
 
-> **Статус (2026-04):** модуль `DigestRanker` (`select/ranker.py`) реализован и покрыт тестами, но **`digest_core/run.py` его не вызывает** — см. **§4.3** в [`digest-core/docs/ARCHITECTURE.md`](../../digest-core/docs/ARCHITECTURE.md). Ниже — описание возможностей ранкера, конфигурации и целевой интеграции. Утверждения про A/B в проде, сквозные Prometheus-метрики и автоматическую связку с citation pipeline следует читать как **план / дизайн**, пока ранкер не подключён к основному run.
+> **Статус (2026-04-06):** `DigestRanker` вызывается из **`digest_core/run.py`** после LLM (и после опционального пост-LLM citation pass), **если** в конфиге **`ranker.enabled: true`**. По умолчанию в **`RankerConfig`** стоит **`enabled: false`** — порядок пунктов как у модели. Каноничное описание: **§4.3** и пост-LLM шаги в [`digest-core/docs/ARCHITECTURE.md`](../../digest-core/docs/ARCHITECTURE.md). Prometheus-метрики ранжирования могут по-прежнему не инкрементиться из daily `run` — проверять фактические `record_*` в коде.
 
 ## Обзор
 
@@ -50,7 +50,7 @@ score = Σ(weight_i × feature_i)  # Normalized to [0.0, 1.0]
 
 ```yaml
 ranker:
-  enabled: true              # Enable ranking
+  enabled: false             # Default off; set true to reorder items per section
   
   # Feature weights (normalized to sum to 1.0)
   weight_user_in_to: 0.15
